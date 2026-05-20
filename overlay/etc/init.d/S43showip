@@ -4,7 +4,7 @@ TIMEOUT=15
 
 i=0
 while [ $i -lt "$TIMEOUT" ]; do
-    ip=$(ip -4 -o addr show eth0 | awk '{print $4}' | cut -d/ -f1)
+    ip=$(ip -4 -o addr show usb0 | awk '{print $4}' | cut -d/ -f1)
     if [ -n "$ip" ]; then
         echo "SSH: root@$ip"
         # Signal mit IP für hello Skript in /run

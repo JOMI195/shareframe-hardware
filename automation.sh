@@ -7,6 +7,9 @@ BUILDROOT_BASE_URL="https://buildroot.org/downloads/"
 TOOLCHAIN_NAME="armv6-eabihf--musl--stable-2025.08-1"
 TOOLCHAIN_BASE_URL="https://toolchains.bootlin.com/downloads/releases/toolchains/armv6-eabihf/tarballs/"
 
+PI4B="${PI4B:-base@rpi4b-shareframe-base.local}"
+PI4B_SERIAL="${PI4B_SERIAL:-/dev/serial0}"
+
 [[ -d artifacts ]] || mkdir artifacts
 
 # download given uri and return name of downloaded file
@@ -98,49 +101,49 @@ function buildroot() {
       BR2_EXTERNAL="$(realpath .)" \
       defconfig
     make -C "$src_dir" olddefconfig
-#
-#    echo "=== Buildroot bauen ==="
-#    make -C "$src_dir" linux-reconfigure
-#    make -C "$src_dir" -j"$(nproc)"
-#
-#    echo "=== Generierte Dateien extrahieren ==="
-#    cp "$src_dir/output/images/Image" artifacts/Image
-#    cp "$src_dir/output/images/rootfs.cpio.gz" artifacts/rootfs.cpio.gz
-#    cp "$src_dir/output/images/bcm2835-rpi-zero-w.dtb" artifacts/
-#    cp "$src_dir/output/images/rpi-firmware/start4.elf" artifacts/
-#    cp "$src_dir/output/images/rpi-firmware/fixup4.dat" artifacts/
-#
-#    echo "=== Auswertung generierter Dateien ==="
-#    local image_path rootfs_path
-#    image_path="$(realpath artifacts/Image)"
-#    rootfs_path="$(realpath artifacts/rootfs.cpio.gz)"
-#    echo "Image:  $image_path"
-#    file "$image_path"
-#    echo "rootfs: $rootfs_path"
-#    file "$rootfs_path"
+
+    echo "=== Buildroot bauen ==="
+    make -C "$src_dir" linux-reconfigure
+    make -C "$src_dir" -j"$(nproc)"
+
+    echo "=== Generierte Dateien extrahieren ==="
+    local img="$src_dir/output/images"
+    cp "$img/zImage"                   artifacts/zImage
+    cp "$img/bcm2835-rpi-zero-w.dtb"   artifacts/
+    cp "$img/rootfs.cpio.gz"           artifacts/rootfs.cpio.gz
+    # Firmware-Blobs + U-Boot nur für echte Hardware (SD-Karte) — falls vorhanden
+    for f in bootcode.bin start.elf fixup.dat; do
+        [ -f "$img/rpi-firmware/$f" ] && cp "$img/rpi-firmware/$f" artifacts/
+    done
+    [ -f "$img/u-boot.bin" ] && cp "$img/u-boot.bin" artifacts/
+    [ -f "$img/boot.scr" ]   && cp "$img/boot.scr"   artifacts/
+
+    echo "=== Auswertung generierter Dateien ==="
+    file "$(realpath artifacts/zImage)"
+    file "$(realpath artifacts/rootfs.cpio.gz)"
+    file "$(realpath artifacts/bcm2835-rpi-zero-w.dtb)"
 }
 
-function qemu_virt() {
-    qemu-system-aarch64 \
-      -M virt \
-      -m 256 \
-      -nographic \
-      -kernel artifacts/Image \
-      -initrd artifacts/rootfs.cpio.gz \
-      -append "console=ttyAMA0" \
-      -cpu cortex-a72
-}
-
-function qemu_rpi4() {
-    qemu-system-aarch64 \
-        -M raspi4b \
-        -m 2G \
-        -smp 4 \
+function qemu_rpi0() {
+    # Quick-Verify ohne Hardware: bootet zImage + initramfs bis BusyBox-Login.
+    # USB-Gadget/usb0/SSH sind in QEMU NICHT testbar (kein Host-Gegenstück) — die
+    # "ip: can't find device usb0"-Meldungen sind hier normal.
+    #
+    # Konsole = ttyS1 (mini-UART, 0x20215040) wie auf echter Hardware (GPIO-UART zum 4B).
+    # QEMU-only:
+    #  - "-serial null -serial mon:stdio": legt die mini-UART (serial_hd(1)) auf stdio,
+    #    sonst zeigt -nographic nur die PL011 und ttyS1 bliebe unsichtbar.
+    #  - earlycon=uart8250,...,0x20215040: Early-Output auf der mini-UART.
+    #  - initcall_blacklist=...power/wdt: QEMU modelliert den BCM2835-PM/Watchdog-
+    #    Block nicht -> sonst Oops in bcm2835_power_probe bzw. Reboot-Loop.
+    qemu-system-arm \
+        -M raspi0 \
         -nographic \
-        -kernel artifacts/Image \
-        -dtb artifacts/bcm2711-rpi-4-b.dtb \
+        -serial null -serial mon:stdio \
+        -kernel artifacts/zImage \
+        -dtb artifacts/bcm2835-rpi-zero-w.dtb \
         -initrd artifacts/rootfs.cpio.gz \
-        -append "console=ttyAMA0,115200 root=/dev/ram0 earlycon clk_ignore_unused"
+        -append "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/ram0 rw initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init"
 }
 
 function clean() {
@@ -204,30 +207,23 @@ function build() {
 }
 
 function deploy() {
-    echo "=== Sende Artefakte zu Cluster PI ==="
-    scp -P 10002 \
-        artifacts/Image \
-        artifacts/bcm2711-rpi-4-b.dtb \
+    echo "=== Sende Netboot-Artefakte zum Pi 4B (TFTP) ==="
+    ssh "$PI4B" "mkdir -p /srv/tftp/pizero"
+    scp \
+        artifacts/zImage \
+        artifacts/bcm2835-rpi-zero-w.dtb \
         artifacts/rootfs.cpio.gz \
-        artifacts/start4.elf \
-        artifacts/fixup4.dat \
-        m5/cmdline.txt \
-        m5/config.txt \
-        esys@141.37.31.100:/srv/tftp/
+        "$PI4B:/srv/tftp/pizero/"
 }
 
 function restart() {
-    echo "=== Starte Cluster PI neu ==="
-    ssh esys-cluster "./enable_pi.sh false && sleep 2 && ./enable_pi.sh true"
+    echo "=== Power-Cycle des Pi Zero über den 4B (uhubctl) ==="
+    ssh "$PI4B" "reset-zero"
 }
 
 function connect_serial() {
-    echo "=== Verbinde zu Cluster PI über TT&C-Channel ==="
-    ssh esys-cluster -L 3001:localhost:3001 -N &
-    local pid=$!
-    trap 'kill "$pid" 2>/dev/null' EXIT
-    sleep 1
-    nc localhost 3001
+    echo "=== Verbinde zur Zero-Serial-Konsole über den 4B ==="
+    ssh -t "$PI4B" "picocom -b 115200 $PI4B_SERIAL"
 }
 
 "${@:-build}"

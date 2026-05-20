@@ -1,7 +1,21 @@
+# --- Minimal / headless: nicht benötigte Subsysteme aus ---
 # CONFIG_DRM is not set
 # CONFIG_FB is not set
 # CONFIG_SOUND is not set
 # CONFIG_BCM2835_VCHIQ is not set
-# CONFIG_BRCMSTB_L2_IRQ is not set
-# CONFIG_I2C_BRCMSTB is not set
+
+# --- Pi Zero W braucht: Serial-Konsole (ttyAMA0) ---
+CONFIG_SERIAL_AMBA_PL011=y
+CONFIG_SERIAL_AMBA_PL011_CONSOLE=y
+
+# --- Root als initramfs (cpio) im RAM ---
+CONFIG_BLK_DEV_INITRD=y
+
+# --- USB-Gadget-Ethernet (usb0, nur SSH — kein Boot) ---
+CONFIG_USB_DWC2=y
+CONFIG_USB_DWC2_DUAL_ROLE=y
+CONFIG_USB_GADGET=y
+CONFIG_USB_LIBCOMPOSITE=y
+CONFIG_USB_ETH=y
+
 CONFIG_LOCALVERSION_AUTO=n
