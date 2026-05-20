@@ -1,0 +1,71 @@
+# Build artifacts
+artifacts/
+busybox/src/
+buildroot/src
+toolchain/src
+kernel-localversion.fragment
+
+modules/**/*.o
+modules/**/*.ko
+modules/**/*.mod
+modules/**/*.mod.c
+modules/**/.*.cmd
+modules/**/Module.symvers
+modules/**/modules.order
+modules/**/.tmp_versions/
+modules/**/built-in.a
+
+# Downloaded files
+linux-*.tar*
+busybox-*.tar*
+buildroot-*.tar*
+armv6-*.tar*
+armv6-*.sha256
+
+# Only local header include dir for modules
+CMakeLists.txt
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug files
+*.dSYM/
+*.su
+
+# Lokale Claude-Config — nie ins Studi-sichtbare Template
+.claude/
+
+# Python bytecode (ci/check-files.py etc.)
+__pycache__/
+*.pyc
+
+# Jetbrains
+.idea/
+
+# Rust
+**/Cargo.lock
+**/target/

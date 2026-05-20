@@ -1,0 +1,6 @@
+#!/bin/sh
+
+# laufenden udhcpc zu sofortigem Lease-Versuch anstossen.
+# Spart das naechste Retry-Intervall (5-10s), falls der Link zu Eth-PHY gerade erst up ging.
+# [ -r ... ] schuetzt gegen den Fall, dass udhcpc (noch) nicht laeuft.
+[ -r /var/run/udhcpc.eth0.pid ] && kill -USR1 "$(cat /var/run/udhcpc.eth0.pid)" 2>/dev/null

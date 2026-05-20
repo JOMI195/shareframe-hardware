@@ -1,0 +1,16 @@
+#!/bin/sh
+
+STATE=/run/ntp.synced
+
+case "$1" in
+    step)
+        touch "$STATE"
+        echo "ntpd: synced" > /dev/console
+        ;;
+    stratum|periodic)
+        touch "$STATE"
+        ;;
+    unsync)
+        rm -f "$STATE"
+        ;;
+esac

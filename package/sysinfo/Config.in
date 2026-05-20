@@ -1,0 +1,5 @@
+config BR2_PACKAGE_SYSINFO
+	bool "sysinfo"
+	help
+	  Zeigt Systeminformationen an (Hostname, Uptime, RAM,
+	  Page size, Kernel-Version).

@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_HW4_PATH/package/sysinfo/Config.in"

@@ -1,0 +1,5 @@
+[all]
+arm_64bit=1
+enable_uart=1
+kernel=Image
+initramfs rootfs.cpio.gz followkernel

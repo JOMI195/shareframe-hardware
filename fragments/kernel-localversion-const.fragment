@@ -1,0 +1,7 @@
+# CONFIG_DRM is not set
+# CONFIG_FB is not set
+# CONFIG_SOUND is not set
+# CONFIG_BCM2835_VCHIQ is not set
+# CONFIG_BRCMSTB_L2_IRQ is not set
+# CONFIG_I2C_BRCMSTB is not set
+CONFIG_LOCALVERSION_AUTO=n

@@ -1,0 +1,31 @@
+#!/bin/sh
+
+HANDLER=/usr/libexec/ntpd-handler
+PEER=time.htwg-konstanz.de
+
+case "$1" in
+    start)
+        printf "Starting ntpd: "
+        /usr/sbin/ntpd -n -p "$PEER" -S "$HANDLER" &
+        echo $! > /run/ntpd.pid
+        echo "OK"
+        ;;
+    stop)
+        printf "Stopping ntpd: "
+        if [ -r /run/ntpd.pid ]; then
+            kill "$(cat /run/ntpd.pid)" 2>/dev/null
+            rm -f /run/ntpd.pid
+            echo "OK"
+        else
+            echo "not running"
+        fi
+        ;;
+    restart|reload)
+        "$0" stop
+        "$0" start
+        ;;
+    *)
+        echo "$0 not defined"
+        exit 1
+        ;;
+esac
