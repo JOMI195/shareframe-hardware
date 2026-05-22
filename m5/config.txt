@@ -1,4 +1,0 @@
-# Pi Zero W (BCM2835) — GPU lädt U-Boot, U-Boot holt Kernel/DTB/initramfs per TFTP
-enable_uart=1
-dtoverlay=dwc2
-kernel=u-boot.bin

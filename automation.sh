@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -xe
 
-BUILDROOT_VERSION="buildroot-2025.11.3"
+BUILDROOT_VERSION="2026.02.2"
 BUILDROOT_BASE_URL="https://buildroot.org/downloads/"
 
 TOOLCHAIN_NAME="armv6-eabihf--musl--stable-2025.08-1"
 TOOLCHAIN_BASE_URL="https://toolchains.bootlin.com/downloads/releases/toolchains/armv6-eabihf/tarballs/"
 
-PI4B="${PI4B:-base@rpi4b-shareframe-base.local}"
-PI4B_SERIAL="${PI4B_SERIAL:-/dev/serial0}"
+PI4B="${PI4B:-base@shareframe-base}"
+PI4B_SERIAL="${PI4B_SERIAL:-/dev/ttyACM0}"   # Raspberry Pi Debug Probe am 4B = CDC-ACM
 
 [[ -d artifacts ]] || mkdir artifacts
 
@@ -86,8 +86,8 @@ function buildroot() {
     local config="buildroot-rpi0w"
 
     echo "=== Buildroot herunterladen und entpacken ==="
-    local src_uri="$BUILDROOT_BASE_URL/$BUILDROOT_VERSION.tar.gz"
-    local sig_uri="$BUILDROOT_BASE_URL/$BUILDROOT_VERSION.tar.gz.sign"
+    local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
+    local sig_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz.sign"
     local src_dir="buildroot/src"
 
     prepare_src \
@@ -108,20 +108,38 @@ function buildroot() {
 
     echo "=== Generierte Dateien extrahieren ==="
     local img="$src_dir/output/images"
-    cp "$img/zImage"                   artifacts/zImage
-    cp "$img/bcm2835-rpi-zero-w.dtb"   artifacts/
-    cp "$img/rootfs.cpio.gz"           artifacts/rootfs.cpio.gz
-    # Firmware-Blobs + U-Boot nur für echte Hardware (SD-Karte) — falls vorhanden
-    for f in bootcode.bin start.elf fixup.dat; do
-        [ -f "$img/rpi-firmware/$f" ] && cp "$img/rpi-firmware/$f" artifacts/
-    done
-    [ -f "$img/u-boot.bin" ] && cp "$img/u-boot.bin" artifacts/
-    [ -f "$img/boot.scr" ]   && cp "$img/boot.scr"   artifacts/
+    rm -rf artifacts/deploy artifacts/sdcard
+    mkdir -p artifacts/deploy artifacts/sdcard/overlays
 
-    echo "=== Auswertung generierter Dateien ==="
-    file "$(realpath artifacts/zImage)"
-    file "$(realpath artifacts/rootfs.cpio.gz)"
-    file "$(realpath artifacts/bcm2835-rpi-zero-w.dtb)"
+    # --- artifacts/deploy/ : pro Kernel-Iteration ausgeliefert (jetzt TFTP, spaeter direkt) ---
+    cp "$img/zImage"                  artifacts/deploy/
+    cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/deploy/
+    cp "$img/rootfs.cpio.gz"          artifacts/deploy/
+
+    # --- artifacts/sdcard/ : EINMALIG auf die SD-Boot-Partition flashen ---
+    for f in bootcode.bin start.elf fixup.dat; do
+        [ -f "$img/rpi-firmware/$f" ] && cp "$img/rpi-firmware/$f" artifacts/sdcard/
+    done
+    [ -f "$img/u-boot.bin" ] && cp "$img/u-boot.bin" artifacts/sdcard/
+    cp firmware-config/config.txt     artifacts/sdcard/
+    cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/sdcard/   # Firmware-Basis-DTB (fuer dtoverlay)
+    for ov in disable-bt dwc2; do
+        [ -f "$img/rpi-firmware/overlays/$ov.dtbo" ] && cp "$img/rpi-firmware/overlays/$ov.dtbo" artifacts/sdcard/overlays/
+    done
+    # boot.scr aus firmware-config/boot.cmd (mkimage aus dem U-Boot-Build,
+    # vermeidet host-uboot-tools -> host-gnutls -> host-libunistring).
+    local mkimage
+    mkimage="$(ls "$src_dir"/output/build/uboot-*/tools/mkimage 2>/dev/null | head -1)"
+    [ -x "$mkimage" ] || mkimage="$(command -v mkimage 2>/dev/null || true)"
+    if [ -n "$mkimage" ] && [ -f firmware-config/boot.cmd ]; then
+        "$mkimage" -A arm -O linux -T script -C none -d firmware-config/boot.cmd artifacts/sdcard/boot.scr
+    else
+        echo "WARN: mkimage nicht gefunden — boot.scr nicht erzeugt"
+    fi
+
+    echo "=== Auswertung ==="
+    file "$(realpath artifacts/deploy/zImage)"
+    file "$(realpath artifacts/deploy/rootfs.cpio.gz)"
 }
 
 function qemu_rpi0() {
@@ -152,26 +170,34 @@ function clean() {
         case "$arg" in
             --linux)
                 [ "$mode" != "none" ] && {
-                    echo "clean: --linux and --buildroot are mutually exclusive" >&2
+                    echo "clean: --linux, --buildroot, and --toolchain are mutually exclusive" >&2
                     return 1
                 }
                 mode="linux"
                 ;;
             --buildroot)
                 [ "$mode" != "none" ] && {
-                    echo "clean: --linux and --buildroot are mutually exclusive" >&2
+                    echo "clean: --linux, --buildroot, and --toolchain are mutually exclusive" >&2
                     return 1
                 }
                 mode="buildroot"
                 ;;
+            --toolchain)
+                [ "$mode" != "none" ] && {
+                    echo "clean: --linux, --buildroot, and --toolchain are mutually exclusive" >&2
+                    return 1
+                }
+                mode="toolchain"
+                ;;
             *)
-                echo "clean: unknown option '$arg' (use --linux or --buildroot)" >&2
+                echo "clean: unknown option '$arg' (use --linux, --buildroot, or --toolchain)" >&2
                 return 1
                 ;;
         esac
     done
 
     local src_dir="buildroot/src"
+    local toolchain_dir="toolchain"
     echo "=== Aufräumen ==="
 
     if [ -d "$src_dir" ]; then
@@ -185,6 +211,12 @@ function clean() {
                 make -C "$src_dir" clean
                 ;;
         esac
+    fi
+
+    if [ "$mode" = "toolchain" ]; then
+        echo "=== Toolchain entfernen ==="
+        rm -rf "$toolchain_dir/src"
+        rm -f "$toolchain_dir/$TOOLCHAIN_NAME.tar.xz" "$toolchain_dir/$TOOLCHAIN_NAME.sha256"
     fi
 
     rm -rf artifacts/ buildroot/src/output/
@@ -208,11 +240,14 @@ function build() {
 
 function deploy() {
     echo "=== Sende Netboot-Artefakte zum Pi 4B (TFTP) ==="
+
+    local deploy_src_dir="artifacts/deploy"
+
     ssh "$PI4B" "mkdir -p /srv/tftp/pizero"
     scp \
-        artifacts/zImage \
-        artifacts/bcm2835-rpi-zero-w.dtb \
-        artifacts/rootfs.cpio.gz \
+        "$deploy_src_dir/zImage" \
+        "$deploy_src_dir/bcm2835-rpi-zero-w.dtb" \
+        "$deploy_src_dir/rootfs.cpio.gz" \
         "$PI4B:/srv/tftp/pizero/"
 }
 

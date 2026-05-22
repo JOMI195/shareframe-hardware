@@ -1,8 +1,11 @@
-# U-Boot USB-Gadget-Ethernet — damit U-Boot auf dem Zero per TFTP über usb0 booten kann.
-# Noch NICHT in buildroot-rpi0w.conf verdrahtet (Phase "echte Hardware"):
-#   BR2_TARGET_UBOOT=y / BR2_TARGET_UBOOT_BOARD_DEFCONFIG="rpi_0_w" / BOOT_SCRIPT + dieses Fragment.
+# U-Boot USB-Gadget-Ethernet — damit U-Boot auf dem Zero per TFTP über usb0 bootet.
+# DWC2 im Peripheral-Mode (Treiber bindet an "brcm,bcm2835-usb") + RNDIS-Ether-Gadget.
 CONFIG_USB_GADGET=y
 CONFIG_USB_GADGET_DOWNLOAD=y
+CONFIG_USB_GADGET_DWC2_OTG=y
 CONFIG_USB_ETHER=y
 CONFIG_USB_ETH_RNDIS=y
 CONFIG_DM_USB_GADGET=y
+# Workaround: dwc2-RNDIS-RX-Puffer sind nicht cache-aligned ("CACHE: Misaligned
+# operation") -> auf ARMv6 sonst korrupte Empfangspakete -> ARP/TFTP scheitern.
+CONFIG_SYS_DCACHE_OFF=y

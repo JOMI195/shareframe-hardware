@@ -1,0 +1,4 @@
+enable_uart=1
+dtoverlay=disable-bt
+dtoverlay=dwc2,dr_mode=peripheral
+kernel=u-boot.bin

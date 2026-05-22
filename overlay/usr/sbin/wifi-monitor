@@ -1,0 +1,24 @@
+#!/bin/sh
+# Prueft periodisch ob wlan0 verbunden ist; startet WLAN neu wenn nicht.
+IFACE=wlan0
+INTERVAL=30      # Sekunden zwischen Checks
+MAXFAILS=2       # so viele Fehl-Checks in Folge -> Neustart
+
+fails=0
+while true; do
+    sleep "$INTERVAL"
+    state=$(wpa_cli -i "$IFACE" status 2>/dev/null | sed -n 's/^wpa_state=//p')
+    if [ "$state" = "COMPLETED" ]; then
+        fails=0
+        continue
+    fi
+    # erst leichtgewichtig: reassociate
+    wpa_cli -i "$IFACE" reassociate >/dev/null 2>&1
+    fails=$((fails + 1))
+    if [ "$fails" -ge "$MAXFAILS" ]; then
+        logger -t wifi-monitor "WLAN down (state=${state:-none}) -> wifi restart"
+        /etc/init.d/S44wifi restart >/dev/null 2>&1
+        fails=0
+        sleep 10
+    fi
+done

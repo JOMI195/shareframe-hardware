@@ -69,3 +69,6 @@ __pycache__/
 # Rust
 **/Cargo.lock
 **/target/
+
+# Secrets
+wpa_supplicant.conf

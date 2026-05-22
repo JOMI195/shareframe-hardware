@@ -1,1 +1,1 @@
-source "$BR2_EXTERNAL_HW4_PATH/package/sysinfo/Config.in"
+source "$BR2_EXTERNAL_SHAREFRAME_PATH/package/sysinfo/Config.in"
