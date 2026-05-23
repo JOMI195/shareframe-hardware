@@ -1,4 +1,0 @@
-#!/bin/sh
-# Stage-2: s6-rc-DB live schalten + default-Bundle hochfahren.
-s6-rc-init -c /etc/s6-rc/compiled -l /run/s6-rc /run/service
-s6-rc -u change default

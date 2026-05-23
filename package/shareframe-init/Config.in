@@ -1,0 +1,15 @@
+config BR2_PACKAGE_SHAREFRAME_INIT
+	bool "shareframe-init (s6 PID1 basedir + s6-rc DB)"
+	depends on BR2_INIT_NONE
+	select BR2_PACKAGE_S6
+	select BR2_PACKAGE_S6_RC
+	select BR2_PACKAGE_S6_LINUX_INIT
+	select BR2_PACKAGE_EXECLINE
+	select BR2_PACKAGE_HOST_S6_RC
+	select BR2_PACKAGE_HOST_S6_LINUX_INIT_HOST
+	help
+	  Setzt s6 als PID1 ein: erzeugt /etc/s6-linux-init/current per
+	  s6-linux-init-maker, kompiliert die s6-rc-Service-DB nach
+	  /etc/s6-rc/compiled, ueberschreibt rc.init/rc.shutdown mit dem
+	  eigenen Stage-2-Script und legt /init + /sbin/init als Symlinks
+	  auf das s6-init-Binary ab.

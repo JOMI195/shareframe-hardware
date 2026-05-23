@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stage-2: Fruehe Mounts + Hostname, dann s6-rc-DB hochfahren.
+# Buildroots /init mountet nur devtmpfs auf /dev; alles weitere hier
+# (vor s6-rc, damit mdev/oneshots /proc & /sys schon sehen).
+mount -t proc   proc   /proc
+mount -t sysfs  sys    /sys
+mkdir -p /dev/pts /dev/shm /tmp
+mount -t devpts devpts /dev/pts
+mount -t tmpfs  tmpfs  /tmp
+hostname -F /etc/hostname
+
+s6-rc-init -c /etc/s6-rc/compiled -l /run/s6-rc /run/service
+s6-rc -u change default

@@ -1,4 +1,3 @@
-mount-fs
 mdev
 load-brcmfmac
 setup-usb0
