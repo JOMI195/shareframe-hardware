@@ -1,0 +1,43 @@
+#!/bin/sh
+
+SERVICE="$1"
+LOCK_DIR=/run/wifi-stack-restart.lock
+PID_FILE="$LOCK_DIR/pid"
+
+log() {
+    echo "wifi-stack-restart: $*" > /dev/console
+}
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
+        log "already running (triggered by ${SERVICE:-unknown})"
+        exit 0
+    fi
+    rm -rf "$LOCK_DIR"
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        log "failed to acquire lock"
+        exit 1
+    fi
+fi
+
+echo $$ > "$PID_FILE"
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
+log "restart triggered by ${SERVICE:-unknown}"
+
+if ip link show wlan0 >/dev/null 2>&1; then
+    if ! ip addr flush dev wlan0; then
+        log "failed to flush addresses on wlan0"
+    fi
+    if ! ip link set wlan0 down; then
+        log "failed to set wlan0 down"
+    fi
+    if ! ip link set wlan0 up; then
+        log "failed to set wlan0 up"
+    fi
+fi
+
+if ! s6-svc -r /run/service/wpa_supplicant /run/service/wpa-cli-action /run/service/udhcpc-wlan; then
+    log "failed to restart wifi services"
+    exit 1
+fi

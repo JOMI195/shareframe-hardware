@@ -103,6 +103,7 @@ function buildroot() {
     make -C "$src_dir" olddefconfig
 
     echo "=== Buildroot bauen ==="
+    make -C "$src_dir" shareframe-init-dirclean
     make -C "$src_dir" linux-reconfigure
     make -C "$src_dir" -j"$(nproc)"
 

@@ -11,4 +11,5 @@ ntpd
 wpa_supplicant
 udhcpc-wlan
 wpa-cli-action
+wifi-reachability-watch
 getty-ttyS1
