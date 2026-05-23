@@ -1,1 +1,1 @@
-/bin/sh -c "echo /sbin/mdev > /proc/sys/kernel/hotplug; mdev -s"
+/sbin/mdev -s

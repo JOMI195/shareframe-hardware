@@ -1,4 +1,5 @@
 mdev
+mdev-netlink
 load-brcmfmac
 setup-usb0
 syslogd
@@ -9,4 +10,5 @@ dropbear
 ntpd
 wpa_supplicant
 udhcpc-wlan
+wpa-cli-action
 getty-ttyS1

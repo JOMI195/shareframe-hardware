@@ -1,1 +1,1 @@
-/bin/sh -c "modprobe brcmfmac"
+/bin/sh -c "modprobe brcmfmac || true"

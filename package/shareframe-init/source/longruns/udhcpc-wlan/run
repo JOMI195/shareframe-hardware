@@ -1,2 +1,4 @@
 #!/bin/sh
+sleep 1
+until [ -e /sys/class/net/wlan0 ]; do sleep 2; done
 exec udhcpc -f -i wlan0

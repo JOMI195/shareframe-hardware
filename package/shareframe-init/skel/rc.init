@@ -4,9 +4,17 @@
 # (vor s6-rc, damit mdev/oneshots /proc & /sys schon sehen).
 mount -t proc   proc   /proc
 mount -t sysfs  sys    /sys
+
 mkdir -p /dev/pts /dev/shm /tmp
 mount -t devpts devpts /dev/pts
 mount -t tmpfs  tmpfs  /tmp
+
+mount -t tmpfs -o nodev,nosuid,size=32M tmpfs /run
+
+mkdir -p /run/lock /var/log /var/empty /var/spool /etc/cron/crontabs
+ln -sf /run      /var/run
+ln -sf /run/lock /var/lock
+
 hostname -F /etc/hostname
 
 s6-rc-init -c /etc/s6-rc/compiled -l /run/s6-rc /run/service
