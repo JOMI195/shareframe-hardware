@@ -1,0 +1,8 @@
+config BR2_PACKAGE_HOST_S6_LINUX_INIT_HOST
+	bool "host s6-linux-init (s6-linux-init-maker)"
+	help
+	  Host-Build von s6-linux-init. Liefert s6-linux-init-maker,
+	  um beim Buildroot-Build das s6 PID1-basedir zu erzeugen
+	  (Buildroot selbst hat kein host-s6-linux-init).
+
+	  https://skarnet.org/software/s6-linux-init/

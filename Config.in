@@ -1,1 +1,2 @@
 source "$BR2_EXTERNAL_SHAREFRAME_PATH/package/sysinfo/Config.in"
+source "$BR2_EXTERNAL_SHAREFRAME_PATH/package/s6-linux-init-host/Config.in.host"

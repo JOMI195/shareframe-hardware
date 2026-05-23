@@ -158,9 +158,9 @@ function qemu_rpi0() {
         -M raspi0 \
         -nographic \
         -serial null -serial mon:stdio \
-        -kernel artifacts/zImage \
-        -dtb artifacts/bcm2835-rpi-zero-w.dtb \
-        -initrd artifacts/rootfs.cpio.gz \
+        -kernel artifacts/deploy/zImage \
+        -dtb artifacts/deploy/bcm2835-rpi-zero-w.dtb \
+        -initrd artifacts/deploy/rootfs.cpio.gz \
         -append "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/ram0 rw initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init"
 }
 

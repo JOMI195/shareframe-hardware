@@ -1,0 +1,2 @@
+#!/bin/sh
+exec ntpd -n -p 0.pool.ntp.org -p 1.pool.ntp.org -p 2.pool.ntp.org -p 3.pool.ntp.org -S /usr/libexec/ntpd-handler

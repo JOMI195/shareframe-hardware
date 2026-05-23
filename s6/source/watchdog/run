@@ -1,0 +1,2 @@
+#!/bin/sh
+exec watchdog -F -t 5 -T 15 /dev/watchdog

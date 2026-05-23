@@ -1,0 +1,13 @@
+mount-fs
+mdev
+load-brcmfmac
+setup-usb0
+syslogd
+klogd
+crond
+watchdog
+dropbear
+ntpd
+wpa_supplicant
+udhcpc-wlan
+getty-ttyS1
