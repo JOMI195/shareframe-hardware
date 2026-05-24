@@ -1,0 +1,1 @@
+/bin/sh /usr/libexec/s6/bind-persistent-state

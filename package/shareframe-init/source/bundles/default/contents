@@ -2,7 +2,7 @@ mdev
 mdev-netlink
 mount-data
 mount-boot
-mount-overlays
+bind-persistent-state
 mount-services-sqfs
 fake-hwclock-restore
 fake-hwclock-save

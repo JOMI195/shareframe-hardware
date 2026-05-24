@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/libexec/wifi-stack-restart wpa_supplicant
+exec /usr/libexec/s6/wifi-stack-restart wpa_supplicant

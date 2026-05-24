@@ -1,0 +1,6 @@
+#!/bin/sh
+# Static IP for the USB gadget link. Laptop side gets 10.55.0.1 from udhcpd-usb0
+# once this oneshot completes.
+set -e
+ip addr add 10.55.0.2/24 dev usb0
+ip link set usb0 up

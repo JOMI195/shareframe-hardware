@@ -1,1 +1,1 @@
-/bin/sh /usr/libexec/shareframe/fake-hwclock-restore
+/bin/sh /usr/libexec/s6/fake-hwclock-restore

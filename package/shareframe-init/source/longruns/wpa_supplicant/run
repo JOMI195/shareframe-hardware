@@ -1,5 +1,2 @@
 #!/bin/sh
-sleep 1
-until [ -e /sys/class/net/wlan0 ]; do sleep 2; done
-mkdir -p /var/run/wpa_supplicant
-exec wpa_supplicant -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf -D nl80211
+exec /usr/libexec/s6/wpa_supplicant

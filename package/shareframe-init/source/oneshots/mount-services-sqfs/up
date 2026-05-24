@@ -1,1 +1,1 @@
-/bin/sh /usr/libexec/shareframe/mount-services-sqfs
+/bin/sh /usr/libexec/s6/mount-services-sqfs

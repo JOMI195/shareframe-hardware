@@ -1,0 +1,4 @@
+#!/bin/sh
+# Load the Broadcom wifi driver. Already loaded → modprobe returns 0; missing
+# module on boards without brcm wifi → ignore so the oneshot still succeeds.
+modprobe brcmfmac || true

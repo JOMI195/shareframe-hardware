@@ -1,1 +1,1 @@
-/bin/sh /usr/libexec/shareframe/rauc-mark-good
+/bin/sh /usr/libexec/s6/rauc-mark-good

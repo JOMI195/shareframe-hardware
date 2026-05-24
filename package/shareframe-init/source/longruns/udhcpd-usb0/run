@@ -1,18 +1,2 @@
 #!/bin/sh
-# In prod mode, run a single-lease DHCP server on usb0 so a plugged-in laptop
-# gets 10.55.0.1 automatically and SSH on root@10.55.0.2 just works. In dev
-# mode, u-boot owns the link for TFTP; the longrun parks itself so s6-rc
-# considers the service "up" without consuming usb0.
-mode=$(cat /etc/shareframe-mode 2>/dev/null || echo prod)
-if [ "${mode}" != "prod" ]; then
-	echo "udhcpd-usb0: parked (shareframe-mode=${mode})"
-	exec sleep infinity
-fi
-
-# Wait for usb0 + IP from setup-usb0 oneshot.
-until ip -4 -o addr show usb0 2>/dev/null | grep -q '10\.55\.0\.2'; do
-	sleep 1
-done
-
-mkdir -p /var/lib/misc
-exec udhcpd -f /etc/udhcpd.conf
+exec /usr/libexec/s6/udhcpd-usb0

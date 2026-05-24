@@ -1,1 +1,1 @@
-/bin/sh /usr/libexec/shareframe/mount-data
+/bin/sh /usr/libexec/s6/mount-data

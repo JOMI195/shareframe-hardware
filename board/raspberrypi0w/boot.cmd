@@ -36,7 +36,7 @@ if test "${dev_netboot}" = "1"; then
     # systemd-networkd/dhcpcd brings up usb0, ~5-10s after Zero powers on).
     # Wait for the host to be ready, and bump ARP retries for the TFTP itself.
     echo "Dev netboot: settle USB gadget, then TFTP -> slot A"
-    sleep 8
+    sleep 15
     setenv arpretries 20
     setenv arp_wait_ms 200
     mmc dev 0

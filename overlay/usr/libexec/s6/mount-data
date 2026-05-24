@@ -17,4 +17,3 @@ mkdir -p "${MNT}/dropbear" "${MNT}/services" "${MNT}/rauc" "${MNT}/updates" \
 # /data/fake-hwclock is a FILE (epoch as text), written by fake-hwclock-save.
 # Do NOT mkdir it. Heal old layouts that mistakenly created it as a dir.
 [ -d "${MNT}/fake-hwclock" ] && rmdir "${MNT}/fake-hwclock" 2>/dev/null || true
-[ -f "${MNT}/machine-id" ] || : > "${MNT}/machine-id"

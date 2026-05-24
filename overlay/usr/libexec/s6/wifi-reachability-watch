@@ -1,0 +1,43 @@
+#!/bin/sh
+
+TARGET_IP="1.1.1.1"
+BASE_INTERVAL=30
+MAX_INTERVAL=300
+FAIL_LIMIT=5
+
+failures=0
+sleep_s=$BASE_INTERVAL
+
+log() {
+    echo "wifi-reachability-watch: $*" > /dev/console
+}
+
+while true; do
+    if ping -c1 -W1 "$TARGET_IP" >/dev/null 2>&1; then
+        if [ "$failures" -ne 0 ]; then
+            log "reachable again; reset backoff"
+        fi
+        failures=0
+        sleep_s=$BASE_INTERVAL
+    else
+        failures=$((failures + 1))
+        if [ "$failures" -ge "$FAIL_LIMIT" ]; then
+            log "unreachable (${failures}/${FAIL_LIMIT}); restarting wifi stack"
+            if [ -x /usr/libexec/s6/wifi-stack-restart ]; then
+                /usr/libexec/s6/wifi-stack-restart "reachability-$TARGET_IP" || log "wifi-stack-restart failed"
+            else
+                log "wifi-stack-restart missing"
+            fi
+            failures=0
+            sleep_s=$BASE_INTERVAL
+        else
+            sleep_s=$((sleep_s * 2))
+            if [ "$sleep_s" -gt "$MAX_INTERVAL" ]; then
+                sleep_s=$MAX_INTERVAL
+            fi
+            log "unreachable (${failures}/${FAIL_LIMIT}); next check in ${sleep_s}s"
+        fi
+    fi
+
+    sleep "$sleep_s"
+done

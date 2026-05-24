@@ -1,1 +1,1 @@
-/bin/sh -c "ip addr add 10.55.0.2/24 dev usb0; ip link set usb0 up"
+/bin/sh /usr/libexec/s6/setup-usb0

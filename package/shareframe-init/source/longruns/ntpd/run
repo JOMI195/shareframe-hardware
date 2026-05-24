@@ -1,4 +1,4 @@
 #!/bin/sh
 sleep 1
 until grep -q "^nameserver " /etc/resolv.conf 2>/dev/null; do sleep 5; done
-exec ntpd -n -p 0.pool.ntp.org -p 1.pool.ntp.org -p 2.pool.ntp.org -p 3.pool.ntp.org -S /usr/libexec/ntpd-handler
+exec ntpd -n -p 0.pool.ntp.org -p 1.pool.ntp.org -p 2.pool.ntp.org -p 3.pool.ntp.org -S /usr/libexec/s6/ntpd-handler

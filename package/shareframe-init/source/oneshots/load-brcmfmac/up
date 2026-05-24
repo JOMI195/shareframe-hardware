@@ -1,1 +1,1 @@
-/bin/sh -c "modprobe brcmfmac || true"
+/bin/sh /usr/libexec/s6/load-brcmfmac

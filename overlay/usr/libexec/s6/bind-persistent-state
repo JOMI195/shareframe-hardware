@@ -1,0 +1,6 @@
+#!/bin/sh
+# Bind persistent state from /data into rootfs
+set -e
+
+mkdir -p /etc/dropbear /data/dropbear
+mount --bind /data/dropbear /etc/dropbear

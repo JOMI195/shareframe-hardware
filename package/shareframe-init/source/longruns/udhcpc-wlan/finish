@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/libexec/wifi-stack-restart udhcpc-wlan
+exec /usr/libexec/s6/wifi-stack-restart udhcpc-wlan

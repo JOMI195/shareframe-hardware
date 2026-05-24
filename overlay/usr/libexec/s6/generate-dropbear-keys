@@ -1,0 +1,8 @@
+#!/bin/sh
+# Generate dropbear host keys if missing. Idempotent.
+set -e
+KEYDIR=/etc/dropbear
+for t in rsa ecdsa ed25519; do
+	f="${KEYDIR}/dropbear_${t}_host_key"
+	[ -s "$f" ] || dropbearkey -t "$t" -f "$f"
+done

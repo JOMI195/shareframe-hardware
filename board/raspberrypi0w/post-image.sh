@@ -19,7 +19,7 @@ HOST_BIN="${PROJECT_ROOT}/buildroot/src/output/host/bin"
 
 # 1. Compile boot.cmd -> boot.scr (U-Boot script) using the in-tree mkimage.
 MKIMAGE="$(ls "${BUILD_DIR}"/uboot-*/tools/mkimage 2>/dev/null | head -1 || true)"
-BOOT_CMD="${PROJECT_ROOT}/firmware-config/boot.cmd"
+BOOT_CMD="${BOARD_DIR}/boot.cmd"
 if [ -n "${MKIMAGE}" ] && [ -f "${BOOT_CMD}" ]; then
 	"${MKIMAGE}" -A arm -O linux -T script -C none \
 		-d "${BOOT_CMD}" "${BINARIES_DIR}/boot.scr"
@@ -31,7 +31,7 @@ fi
 # SHAREFRAME_MODE=dev flips dev_netboot=1 (U-Boot TFTPs new artifacts into
 # slot A then boots); =prod (default) keeps dev_netboot=0.
 MKENVIMAGE="${HOST_BIN}/mkenvimage"
-ENV_TXT="${PROJECT_ROOT}/firmware-config/uboot.env.txt"
+ENV_TXT="${BOARD_DIR}/uboot.env.txt"
 MODE="${SHAREFRAME_MODE:-prod}"
 case "${MODE}" in dev) DEV_NETBOOT=1 ;; *) DEV_NETBOOT=0 ;; esac
 if [ -x "${MKENVIMAGE}" ] && [ -f "${ENV_TXT}" ]; then
