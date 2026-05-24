@@ -20,3 +20,14 @@ if [ -n "$BUILD_SHA" ]; then
     } >> "$TARGET_DIR/etc/os-release"
     echo "=== Post-build: BUILD_ID in /etc/os-release ergaenzt ==="
 fi
+
+# Fake-hwclock seed: virgin SDs without /data/fake-hwclock start at build time
+# instead of the 1970 epoch (TLS, log timestamps).
+date +%s > "$TARGET_DIR/etc/fake-hwclock-default"
+echo "=== Post-build: /etc/fake-hwclock-default mit Build-Epoch geschrieben ==="
+
+# SHAREFRAME_MODE: dev | prod. Consumed by mode-aware longruns (Phase 6
+# udhcpd-usb0 only runs in prod). Pure runtime signal; does not alter boot path.
+MODE="${SHAREFRAME_MODE:-prod}"
+echo "${MODE}" > "$TARGET_DIR/etc/shareframe-mode"
+echo "=== Post-build: /etc/shareframe-mode=${MODE} ==="

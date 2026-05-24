@@ -1,0 +1,8 @@
+config BR2_PACKAGE_SHAREFRAME_RAUC
+	bool "shareframe-rauc"
+	depends on BR2_PACKAGE_RAUC
+	help
+	  RAUC system.conf + per-slot post-install hook for the
+	  shareframe-pi0w A/B layout. Installs the dev CA cert
+	  (from package/shareframe-rauc/files/ca.cert.pem) into
+	  /etc/rauc/ as the trust anchor for bundle verification.

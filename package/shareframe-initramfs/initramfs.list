@@ -1,0 +1,19 @@
+# gen_init_cpio manifest. @INIT_SRC@ / @BUSYBOX_SRC@ substitution in .mk.
+
+dir   /bin                    0755 0 0
+dir   /dev                    0755 0 0
+nod   /dev/console            0600 0 0 c 5 1
+dir   /proc                   0755 0 0
+dir   /sys                    0755 0 0
+dir   /newroot                0755 0 0
+dir   /lower                  0755 0 0
+dir   /upper                  0755 0 0
+
+file  /init                   @INIT_SRC@     0755 0 0
+file  /bin/busybox            @BUSYBOX_SRC@  0755 0 0
+
+slink /bin/sh                 busybox        0777 0 0
+slink /bin/mount              busybox        0777 0 0
+slink /bin/mkdir              busybox        0777 0 0
+slink /bin/sed                busybox        0777 0 0
+slink /bin/switch_root        busybox        0777 0 0

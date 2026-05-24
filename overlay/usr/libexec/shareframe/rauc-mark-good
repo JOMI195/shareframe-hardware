@@ -1,0 +1,17 @@
+#!/bin/sh
+# Late-boot health gate: when wifi has an IP (or 60s timeout), declare current
+# slot good. Resets BOOT_${slot}_LEFT=3 in uboot.env via RAUC.
+# Background so this oneshot can complete and not block boot.
+
+(
+	tries=12   # 12 * 5s = 60s max
+	while [ "${tries}" -gt 0 ]; do
+		ip -4 -o addr show wlan0 2>/dev/null | grep -q inet && break
+		tries=$((tries - 1))
+		sleep 5
+	done
+
+	if [ -x /usr/bin/rauc ]; then
+		/usr/bin/rauc status mark-good >/dev/null 2>&1 || true
+	fi
+) &

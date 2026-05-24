@@ -1,0 +1,9 @@
+config BR2_PACKAGE_SHAREFRAME_INITRAMFS
+	bool "shareframe-initramfs"
+	depends on BR2_PACKAGE_BUSYBOX
+	depends on BR2_TOOLCHAIN_USES_MUSL
+	help
+	  Tiny initramfs that boots from a squashfs rootfs slot
+	  and applies a tmpfs overlay so / is writable.
+
+	  Produces $(BINARIES_DIR)/initramfs.cpio.gz.

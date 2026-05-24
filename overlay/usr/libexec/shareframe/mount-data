@@ -1,0 +1,20 @@
+#!/bin/sh
+# Mount /dev/mmcblk0p4 at /data (ext4). Format on first boot if no FS.
+set -e
+DEV=/dev/mmcblk0p4
+MNT=/data
+
+mkdir -p "${MNT}"
+
+if ! mount -t ext4 "${DEV}" "${MNT}" 2>/dev/null; then
+	mke2fs -t ext4 -F -L data "${DEV}"
+	mount -t ext4 "${DEV}" "${MNT}"
+fi
+
+# Seed the directory tree we rely on. Idempotent.
+mkdir -p "${MNT}/dropbear" "${MNT}/services" "${MNT}/rauc" "${MNT}/updates" \
+	"${MNT}/var-upper" "${MNT}/var-work"
+# /data/fake-hwclock is a FILE (epoch as text), written by fake-hwclock-save.
+# Do NOT mkdir it. Heal old layouts that mistakenly created it as a dir.
+[ -d "${MNT}/fake-hwclock" ] && rmdir "${MNT}/fake-hwclock" 2>/dev/null || true
+[ -f "${MNT}/machine-id" ] || : > "${MNT}/machine-id"

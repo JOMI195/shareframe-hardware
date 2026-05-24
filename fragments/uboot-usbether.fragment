@@ -9,3 +9,18 @@ CONFIG_DM_USB_GADGET=y
 # Workaround: dwc2-RNDIS-RX-Puffer sind nicht cache-aligned ("CACHE: Misaligned
 # operation") -> auf ARMv6 sonst korrupte Empfangspakete -> ARP/TFTP scheitern.
 CONFIG_SYS_DCACHE_OFF=y
+
+# --- A/B + RAUC: env auf der boot-FAT, redundantes Paar gegen Power-Loss
+CONFIG_ENV_IS_IN_FAT=y
+CONFIG_ENV_FAT_INTERFACE="mmc"
+CONFIG_ENV_FAT_DEVICE_AND_PART="0:1"
+CONFIG_ENV_FAT_FILE="uboot.env"
+CONFIG_ENV_SIZE=0x4000
+# Note: upstream U-Boot does not support CONFIG_SYS_REDUNDAND_ENVIRONMENT
+# with CONFIG_ENV_IS_IN_FAT. Single uboot.env file only.
+CONFIG_CMD_SETEXPR=y
+CONFIG_CMD_FAT_WRITE=y
+# --- Dev-netboot writes squashfs to slot A via `mmc write` + `part start`
+CONFIG_CMD_MMC=y
+CONFIG_MMC_WRITE=y
+CONFIG_CMD_PART=y

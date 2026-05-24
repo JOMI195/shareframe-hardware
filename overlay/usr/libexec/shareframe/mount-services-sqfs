@@ -1,0 +1,14 @@
+#!/bin/sh
+# Mount the per-board services squashfs (/opt/services.sqfs) read-only at
+# /opt/services. Each service later mounts its own writable overlay on top
+# (upperdir = /data/services/<name>/upper) once it has runtime state.
+set -e
+
+SQFS=/opt/services.sqfs
+MNT=/opt/services
+
+[ -f "${SQFS}" ] || exit 0          # placeholder absent: nothing to mount
+mkdir -p "${MNT}"
+mountpoint -q "${MNT}" && exit 0
+
+mount -t squashfs -o loop,ro "${SQFS}" "${MNT}"

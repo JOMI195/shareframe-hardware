@@ -11,6 +11,15 @@ CONFIG_SERIAL_AMBA_PL011_CONSOLE=y
 # --- Root als initramfs (cpio) im RAM ---
 CONFIG_BLK_DEV_INITRD=y
 
+# --- Squashfs slot rootfs + tmpfs overlay (mounted by /init in initramfs) ---
+CONFIG_MISC_FILESYSTEMS=y
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_ZSTD=y
+CONFIG_SQUASHFS_XATTR=y
+CONFIG_OVERLAY_FS=y
+# Loop device: mount -t squashfs -o loop /opt/services.sqfs needs this.
+CONFIG_BLK_DEV_LOOP=y
+
 # --- USB-Gadget-Ethernet (usb0, nur SSH — kein Boot) ---
 CONFIG_USB_DWC2=y
 CONFIG_USB_DWC2_DUAL_ROLE=y

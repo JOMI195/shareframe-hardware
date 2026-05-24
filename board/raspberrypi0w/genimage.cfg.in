@@ -1,0 +1,45 @@
+image boot.vfat {
+	vfat {
+		files = {
+#BOOT_FILES#
+		}
+	}
+	size = 64M
+}
+
+image data.ext4 {
+	ext4 {
+		label = "data"
+	}
+	size = 256M
+}
+
+image sdcard.img {
+	hdimage {
+		partition-table-type = "mbr"
+		align = 1M
+	}
+
+	partition boot {
+		partition-type = 0xC
+		bootable = "true"
+		image = "boot.vfat"
+	}
+
+	partition rootfs_a {
+		partition-type = 0x83
+		image = "rootfs.squashfs"
+		size = 256M
+	}
+
+	partition rootfs_b {
+		partition-type = 0x83
+		image = "rootfs.squashfs"
+		size = 256M
+	}
+
+	partition data {
+		partition-type = 0x83
+		image = "data.ext4"
+	}
+}

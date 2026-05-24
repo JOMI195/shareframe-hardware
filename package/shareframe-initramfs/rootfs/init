@@ -1,0 +1,33 @@
+#!/bin/sh
+# Stage-1: mount essentials, set up overlay on squashfs slot, switch_root.
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+exec 0</dev/console >/dev/console 2>&1
+
+echo "[initramfs] booting"
+
+slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline)
+case "$slot" in
+	A) part=2 ;;
+	B) part=3 ;;
+	*) part=2 ;;
+esac
+
+echo "[initramfs] slot=${slot:-A} -> /dev/mmcblk0p${part}"
+
+mount -t squashfs -o ro /dev/mmcblk0p${part} /lower || {
+	echo "[initramfs] FATAL squashfs mount failed"
+	exec sh
+}
+mount -t tmpfs tmpfs /upper
+mkdir -p /upper/u /upper/w
+mount -t overlay overlay \
+	-o lowerdir=/lower,upperdir=/upper/u,workdir=/upper/w /newroot
+
+mount --move /proc /newroot/proc
+mount --move /sys  /newroot/sys
+mount --move /dev  /newroot/dev
+
+exec switch_root /newroot /sbin/init

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Persist current epoch every 5 minutes so cold boot has a sane starting clock.
+while true; do
+	date +%s > /data/fake-hwclock.tmp 2>/dev/null && \
+		mv /data/fake-hwclock.tmp /data/fake-hwclock
+	sleep 300
+done

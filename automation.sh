@@ -85,6 +85,12 @@ function toolchain() {
 function buildroot() {
     local config="buildroot-rpi0w"
 
+    # SHAREFRAME_MODE: dev | prod (default). Picked up by:
+    #   - post-image.sh -> sets dev_netboot=0|1 in compiled uboot.env
+    #   - post-build.sh -> writes /etc/shareframe-mode (consumed by Phase 6 longrun)
+    export SHAREFRAME_MODE="${SHAREFRAME_MODE:-prod}"
+    echo "=== SHAREFRAME_MODE=${SHAREFRAME_MODE} ==="
+
     echo "=== Buildroot herunterladen und entpacken ==="
     local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
     local sig_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz.sign"
@@ -110,37 +116,44 @@ function buildroot() {
     echo "=== Generierte Dateien extrahieren ==="
     local img="$src_dir/output/images"
     rm -rf artifacts/deploy artifacts/sdcard
-    mkdir -p artifacts/deploy artifacts/sdcard/overlays
+    mkdir -p artifacts/deploy artifacts/sdcard
 
-    # --- artifacts/deploy/ : pro Kernel-Iteration ausgeliefert (jetzt TFTP, spaeter direkt) ---
+    # --- artifacts/deploy/ : pro Kernel-Iteration ausgeliefert.
+    # Im dev-mode laedt U-Boot diese via TFTP und schreibt rootfs.squashfs
+    # in Slot A sowie zImage/dtb in /boot/A/ und initramfs/boot.scr/uboot.env
+    # an FAT-Root. So sind boot.cmd / uboot-env Aenderungen ohne SD-Reflash
+    # nach einem dev-mode reboot wirksam.
     cp "$img/zImage"                  artifacts/deploy/
     cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/deploy/
-    cp "$img/rootfs.cpio.gz"          artifacts/deploy/
+    cp "$img/rootfs.squashfs"         artifacts/deploy/
+    cp "$img/initramfs.cpio.gz"       artifacts/deploy/
+    [ -f "$img/boot.scr" ]      && cp "$img/boot.scr"      artifacts/deploy/
+    [ -f "$img/uboot.env" ]     && cp "$img/uboot.env"     artifacts/deploy/
 
-    # --- artifacts/sdcard/ : EINMALIG auf die SD-Boot-Partition flashen ---
-    for f in bootcode.bin start.elf fixup.dat; do
-        [ -f "$img/rpi-firmware/$f" ] && cp "$img/rpi-firmware/$f" artifacts/sdcard/
-    done
-    [ -f "$img/u-boot.bin" ] && cp "$img/u-boot.bin" artifacts/sdcard/
-    cp firmware-config/config.txt     artifacts/sdcard/
-    cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/sdcard/   # Firmware-Basis-DTB (fuer dtoverlay)
-    for ov in disable-bt dwc2; do
-        [ -f "$img/rpi-firmware/overlays/$ov.dtbo" ] && cp "$img/rpi-firmware/overlays/$ov.dtbo" artifacts/sdcard/overlays/
-    done
-    # boot.scr aus firmware-config/boot.cmd (mkimage aus dem U-Boot-Build,
-    # vermeidet host-uboot-tools -> host-gnutls -> host-libunistring).
-    local mkimage
-    mkimage="$(ls "$src_dir"/output/build/uboot-*/tools/mkimage 2>/dev/null | head -1)"
-    [ -x "$mkimage" ] || mkimage="$(command -v mkimage 2>/dev/null || true)"
-    if [ -n "$mkimage" ] && [ -f firmware-config/boot.cmd ]; then
-        "$mkimage" -A arm -O linux -T script -C none -d firmware-config/boot.cmd artifacts/sdcard/boot.scr
+    # --- artifacts/sdcard/ : komplettes SD-Image (boot FAT + A/B + /data ext4)
+    # via genimage (BR2_ROOTFS_POST_IMAGE_SCRIPT = board/raspberrypi0w/post-image.sh).
+    # Einmaliges `dd if=sdcard.img of=/dev/sdX` legt alle Partitionen an.
+    if [ -f "$img/sdcard.img" ]; then
+        cp "$img/sdcard.img" artifacts/sdcard/
     else
-        echo "WARN: mkimage nicht gefunden — boot.scr nicht erzeugt"
+        echo "WARN: sdcard.img nicht gefunden — post-image.sh oder genimage failed?"
+    fi
+
+    # --- artifacts/deploy/ : RAUC update bundle (signed). Dev keys via
+    # scripts/gen-dev-keys.sh (run once). Bundle is what the future C++
+    # download service fetches + passes to `rauc install`.
+    if [ -f package/shareframe-rauc/files/cert.pem ] && [ -f package/shareframe-rauc/files/key.pem ]; then
+        if ! ./scripts/make-bundle.sh; then
+            echo "WARN: make-bundle.sh failed"
+        fi
+    else
+        echo "INFO: dev keys missing — skipping RAUC bundle build. Run scripts/gen-dev-keys.sh first."
     fi
 
     echo "=== Auswertung ==="
     file "$(realpath artifacts/deploy/zImage)"
-    file "$(realpath artifacts/deploy/rootfs.cpio.gz)"
+    [ -f artifacts/deploy/rootfs.squashfs ] && file "$(realpath artifacts/deploy/rootfs.squashfs)"
+    [ -f artifacts/sdcard/sdcard.img ] && file "$(realpath artifacts/sdcard/sdcard.img)"
 }
 
 function qemu_rpi0() {
@@ -240,7 +253,7 @@ function build() {
 }
 
 function deploy() {
-    echo "=== Sende Netboot-Artefakte zum Pi 4B (TFTP) ==="
+    echo "=== Sende Dev-Netboot-Artefakte zum Pi 4B (TFTP) ==="
 
     local deploy_src_dir="artifacts/deploy"
 
@@ -248,8 +261,15 @@ function deploy() {
     scp \
         "$deploy_src_dir/zImage" \
         "$deploy_src_dir/bcm2835-rpi-zero-w.dtb" \
-        "$deploy_src_dir/rootfs.cpio.gz" \
+        "$deploy_src_dir/rootfs.squashfs" \
+        "$deploy_src_dir/initramfs.cpio.gz" \
         "$PI4B:/srv/tftp/pizero/"
+    # Optional: bootloader-side files (only present if produced).
+    for f in boot.scr uboot.env; do
+        [ -f "$deploy_src_dir/$f" ] && scp "$deploy_src_dir/$f" "$PI4B:/srv/tftp/pizero/"
+    done
+
+    true
 }
 
 function restart() {

@@ -72,3 +72,7 @@ __pycache__/
 
 # Secrets
 wpa_supplicant.conf
+
+# RAUC dev signing keys (regenerate via scripts/gen-dev-keys.sh)
+package/shareframe-rauc/files/*.pem
+package/shareframe-rauc/files/*.srl

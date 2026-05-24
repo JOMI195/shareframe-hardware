@@ -1,7 +1,14 @@
 mdev
 mdev-netlink
+mount-data
+mount-boot
+mount-overlays
+mount-services-sqfs
+fake-hwclock-restore
+fake-hwclock-save
 load-brcmfmac
 setup-usb0
+udhcpd-usb0
 syslogd
 klogd
 crond
@@ -13,3 +20,4 @@ udhcpc-wlan
 wpa-cli-action
 wifi-reachability-watch
 getty-ttyS1
+rauc-mark-good
