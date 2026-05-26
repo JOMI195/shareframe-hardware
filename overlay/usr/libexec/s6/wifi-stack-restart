@@ -37,7 +37,7 @@ if ip link show wlan0 >/dev/null 2>&1; then
     fi
 fi
 
-if ! s6-svc -r /run/service/wpa_supplicant /run/service/wpa-cli-action /run/service/udhcpc-wlan; then
+if ! s6-svc -r /run/service/wpa_supplicant /run/service/dhcpcd-wlan; then
     log "failed to restart wifi services"
     exit 1
 fi

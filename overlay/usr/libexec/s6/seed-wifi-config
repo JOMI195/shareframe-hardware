@@ -1,0 +1,31 @@
+#!/bin/sh
+# Seed /data/wifi/wpa_supplicant.conf on first boot. Idempotent — never
+# overwrites an existing conf so runtime CRUD via `shareframe-wifi` survives.
+#
+# Seed sources, in preference order:
+#   1. /usr/share/shareframe/wpa_supplicant.conf.default   (cred-bearing,
+#      gitignored, optional — devs drop their own here)
+#   2. /usr/share/shareframe/wpa_supplicant.conf.template  (tracked credless
+#      fallback so a fresh clone still produces a bootable image)
+set -e
+DEST=/data/wifi/wpa_supplicant.conf
+
+mkdir -p /data/wifi
+
+if [ -f "$DEST" ]; then
+	exit 0
+fi
+
+for src in \
+	/usr/share/shareframe/wpa_supplicant.conf.default \
+	/usr/share/shareframe/wpa_supplicant.conf.template
+do
+	if [ -f "$src" ]; then
+		cp "$src" "$DEST"
+		chmod 0600 "$DEST"
+		exit 0
+	fi
+done
+
+echo "seed-wifi-config: no seed source found; $DEST not created" > /dev/console
+exit 0

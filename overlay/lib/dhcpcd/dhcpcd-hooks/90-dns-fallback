@@ -1,0 +1,23 @@
+# dhcpcd hook: ensure /etc/resolv.conf has at least one resolver.
+# If DHCP / RA supplied no nameserver, install public fallbacks so name
+# resolution still works on misconfigured / partial networks.
+
+dns_fallback_install() {
+	case "$reason" in
+		BOUND|REBIND|RENEW|BOUND6|REBIND6|RENEW6) ;;
+		*) return 0 ;;
+	esac
+
+	# If anything wrote a nameserver line, trust it (DHCP or earlier hook).
+	if grep -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
+		return 0
+	fi
+
+	# No DHCP DNS: install public fallbacks.
+	{
+		printf 'nameserver 1.1.1.1\n'
+		printf 'nameserver 8.8.8.8\n'
+	} > /etc/resolv.conf
+}
+
+dns_fallback_install

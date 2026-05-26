@@ -1,0 +1,137 @@
+#!/bin/sh
+# shareframe-wifi — CRUD for wpa_supplicant networks on wlan0.
+# Persists across reboots: wpa_supplicant.conf is bind-mounted from
+# /data/wifi/ (see bind-persistent-state oneshot).
+
+set -eu
+
+IFACE=wlan0
+WPA="wpa_cli -i ${IFACE}"
+
+die() { printf 'shareframe-wifi: %s\n' "$*" >&2; exit 1; }
+
+wpa_ok() {
+	# wpa_cli prints "OK" / "FAIL"; treat anything but OK as failure.
+	out="$(${WPA} "$@" 2>&1)" || true
+	case "$out" in
+		OK*) printf '%s\n' "$out" ;;
+		*FAIL*|*"Could not connect"*) die "wpa_cli $* -> $out" ;;
+		*) printf '%s\n' "$out" ;;
+	esac
+}
+
+# Resolve <ssid|id> to numeric network id. Empty result = not found.
+find_id() {
+	target="$1"
+	# Numeric: trust it.
+	case "$target" in
+		''|*[!0-9]*) ;;
+		*) printf '%s\n' "$target"; return 0 ;;
+	esac
+	${WPA} list_networks 2>/dev/null \
+		| awk -F'\t' -v ssid="$target" 'NR>1 && $2==ssid { print $1; exit }'
+}
+
+usage() {
+	cat <<'EOF'
+Usage: shareframe-wifi <command> [args]
+
+Commands:
+  list                      List configured networks
+  scan                      Scan + show APs sorted by signal
+  add <ssid> [psk]          Add network (open if no psk)
+  del <ssid|id>             Remove network
+  mod <ssid|id> <psk>       Change PSK on existing network
+  status                    Show current association + IP + last ping state
+  help                      Show this help
+EOF
+}
+
+cmd_list() {
+	${WPA} list_networks
+}
+
+cmd_scan() {
+	${WPA} scan >/dev/null
+	sleep 2
+	# scan_results columns: bssid / freq / signal / flags / ssid
+	${WPA} scan_results | awk 'NR==1 { print; next } NR>1' \
+		| (read -r hdr; printf '%s\n' "$hdr"; sort -k3,3 -n -r)
+}
+
+cmd_add() {
+	[ $# -ge 1 ] || die "add: need <ssid> [psk]"
+	ssid="$1"
+	psk="${2:-}"
+
+	id="$(${WPA} add_network | tail -1)"
+	case "$id" in
+		''|*[!0-9]*) die "add_network returned: $id" ;;
+	esac
+
+	# ssid must be quoted in wpa_cli set_network.
+	wpa_ok set_network "$id" ssid "\"${ssid}\"" >/dev/null
+
+	if [ -z "$psk" ]; then
+		wpa_ok set_network "$id" key_mgmt NONE >/dev/null
+	else
+		# Hash via wpa_passphrase so plaintext PSK never lands in the conf.
+		hash="$(wpa_passphrase "$ssid" "$psk" \
+			| awk -F= '/^[[:space:]]*psk=/ { print $2; exit }')"
+		[ -n "$hash" ] || die "wpa_passphrase failed for ssid=$ssid"
+		wpa_ok set_network "$id" psk "$hash" >/dev/null
+	fi
+
+	wpa_ok enable_network "$id" >/dev/null
+	wpa_ok save_config >/dev/null
+	printf 'added network id=%s ssid=%s\n' "$id" "$ssid"
+}
+
+cmd_del() {
+	[ $# -ge 1 ] || die "del: need <ssid|id>"
+	id="$(find_id "$1")"
+	[ -n "$id" ] || die "del: no network matching '$1'"
+	wpa_ok remove_network "$id" >/dev/null
+	wpa_ok save_config >/dev/null
+	printf 'removed network id=%s\n' "$id"
+}
+
+cmd_mod() {
+	[ $# -ge 2 ] || die "mod: need <ssid|id> <psk>"
+	id="$(find_id "$1")"
+	[ -n "$id" ] || die "mod: no network matching '$1'"
+	psk="$2"
+
+	# Pull current ssid (stripped of quotes) so we can hash with it.
+	ssid="$(${WPA} get_network "$id" ssid | sed -e 's/^"//' -e 's/"$//')"
+	[ -n "$ssid" ] || die "mod: could not read ssid for id=$id"
+
+	hash="$(wpa_passphrase "$ssid" "$psk" \
+		| awk -F= '/^[[:space:]]*psk=/ { print $2; exit }')"
+	[ -n "$hash" ] || die "wpa_passphrase failed for ssid=$ssid"
+
+	wpa_ok set_network "$id" psk "$hash" >/dev/null
+	wpa_ok save_config >/dev/null
+	printf 'updated network id=%s ssid=%s\n' "$id" "$ssid"
+}
+
+cmd_status() {
+	${WPA} status || true
+	echo "---"
+	ip -4 addr show "${IFACE}" 2>/dev/null || echo "no ipv4 on ${IFACE}"
+	ip -6 addr show "${IFACE}" scope global 2>/dev/null \
+		| awk '/inet6/ { print }' || true
+}
+
+[ $# -ge 1 ] || { usage; exit 1; }
+sub="$1"; shift
+case "$sub" in
+	list)   cmd_list "$@" ;;
+	scan)   cmd_scan "$@" ;;
+	add)    cmd_add  "$@" ;;
+	del|delete|rm|remove) cmd_del "$@" ;;
+	mod|modify|set)       cmd_mod "$@" ;;
+	status) cmd_status "$@" ;;
+	help|-h|--help) usage ;;
+	*) usage; exit 1 ;;
+esac

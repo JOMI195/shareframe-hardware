@@ -1,0 +1,12 @@
+ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=0
+update_config=1
+country=DE
+
+# No networks pre-seeded. On first boot mount-data copies this file to
+# /data/wifi/wpa_supplicant.conf only if no wpa_supplicant.conf.default
+# is present. Add networks at runtime via:
+#   shareframe-wifi add <ssid> <psk>
+#
+# can override the seed by placing a cred-bearing
+# overlay/usr/share/shareframe/wpa_supplicant.conf.default
