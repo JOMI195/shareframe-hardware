@@ -5,7 +5,7 @@ config BR2_PACKAGE_SHAREFRAME_BOARD
 	select BR2_PACKAGE_OPENSSL
 	select BR2_PACKAGE_SQLITECPP
 	select BR2_PACKAGE_SPDLOG
-	select BR2_PACKAGE_LIBGPIOD
+	select BR2_PACKAGE_LGPIO
 	help
 	  shareframe-application and shareframe-dashboard binaries
 	  built from the sibling repo at ../shareframe-board.

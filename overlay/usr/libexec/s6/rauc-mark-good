@@ -2,7 +2,7 @@
 # Late-boot health gate: when wifi has an IP (or 60s timeout), declare current
 # slot good. Resets BOOT_${slot}_LEFT=3 in uboot.env via RAUC.
 # Background so this oneshot can complete and not block boot.
-
+# TODO: healthy when shareframe application and dashboard did something which still needs to be implemented
 (
 	tries=12   # 12 * 5s = 60s max
 	while [ "${tries}" -gt 0 ]; do

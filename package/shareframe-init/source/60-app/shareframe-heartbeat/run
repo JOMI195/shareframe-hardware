@@ -1,0 +1,2 @@
+#!/bin/sh
+exec env SHAREFRAME_PROFILE=prod /usr/bin/shareframe-heartbeat

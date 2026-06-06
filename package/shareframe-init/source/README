@@ -1,0 +1,19 @@
+s6-rc service source tree
+=========================
+
+Services live in numbered phase folders. The number is a HUMAN MAP of the boot
+phase, grouped by function and assigned in tens so there is room to insert:
+
+    10-base       device nodes + storage foundation (mdev, mounts, hwclock)
+    20-logging    syslogd, klogd
+    30-network    wifi bring-up chain (brcmfmac -> wpa_supplicant -> dhcpcd ...)
+    40-usb        usb0 gadget net (setup-usb0, udhcpd-usb0)
+    50-services   general daemons (crond, ntpd, watchdog, dropbear, getty)
+    60-app        shareframe-application, shareframe-dashboard
+    90-health     rauc-mark-good
+    bundles       the 'default' bundle brought up at boot
+
+IMPORTANT — the number does NOT control run order
+--------------------------------------------------
+s6-rc derives startup order entirely from each service's `dependencies` file.
+Thus the dependency graph is the source of truth.

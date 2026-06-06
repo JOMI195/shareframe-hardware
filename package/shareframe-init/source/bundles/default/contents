@@ -23,3 +23,4 @@ rauc-mark-good
 shareframe-data-dirs
 shareframe-application
 shareframe-dashboard
+shareframe-heartbeat

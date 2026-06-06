@@ -1,0 +1,10 @@
+config BR2_PACKAGE_LGPIO
+	bool "lgpio"
+	help
+	  The lg archive (liblgpio): a library for Linux single-board
+	  computers to access GPIO, I2C, SPI and serial lines via the
+	  GPIO character device.
+
+	  Required by the Waveshare e-Paper driver (USE_LGPIO_LIB).
+
+	  http://abyz.me.uk/lg/

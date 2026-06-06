@@ -4,7 +4,7 @@ set -xe
 BUILDROOT_VERSION="2026.02.2"
 BUILDROOT_BASE_URL="https://buildroot.org/downloads/"
 
-TOOLCHAIN_NAME="armv6-eabihf--musl--stable-2025.08-1"
+TOOLCHAIN_NAME="armv6-eabihf--musl--bleeding-edge-2025.08-1"
 TOOLCHAIN_BASE_URL="https://toolchains.bootlin.com/downloads/releases/toolchains/armv6-eabihf/tarballs/"
 
 PI4B="${PI4B:-base@shareframe-base}"
@@ -111,6 +111,12 @@ function buildroot() {
     echo "=== Buildroot bauen ==="
     make -C "$src_dir" shareframe-init-dirclean
     make -C "$src_dir" linux-reconfigure
+    for mk in modules/*/*.mk package/*/*.mk; do
+        [ -e "$mk" ] || continue
+        grep -qF 'eval $(host-' "$mk" && continue
+        make -C "$src_dir" "$(basename "$mk" .mk)-reconfigure"
+    done
+
     make -C "$src_dir" -j"$(nproc)"
 
     echo "=== Generierte Dateien extrahieren ==="
