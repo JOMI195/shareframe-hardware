@@ -1,3 +1,0 @@
-# Future services contribute their install layout here.
-# Each service goes in its own subdir, e.g. source/svc-foo/<binaries+configs>.
-# All of source/ is packed into /opt/services.sqfs at build time.

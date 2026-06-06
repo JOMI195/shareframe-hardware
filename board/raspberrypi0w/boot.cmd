@@ -26,25 +26,24 @@ fi
 if test "${dev_netboot}" = "1"; then
     setenv ipaddr   10.55.0.2
     setenv serverip 10.55.0.1
-    setenv usbnet_devaddr  f8:dc:7a:00:00:02
-    setenv usbnet_hostaddr f8:dc:7a:00:00:01
     setenv ethact   usb_ether
     setenv ethprime usb_ether
-    setenv netretry yes
-
-    # USB-gadget enumeration on the Pi 4B host is slow (kernel sees device,
-    # systemd-networkd/dhcpcd brings up usb0, ~5-10s after Zero powers on).
-    # Wait for the host to be ready, and bump ARP retries for the TFTP itself.
-    echo "Dev netboot: settle USB gadget, then TFTP -> slot A"
-    sleep 15
     setenv arpretries 20
     setenv arp_wait_ms 200
+    setenv netretry yes
+
+    # Brief settle for the Zero's own gadget enumeration. The 4B already
+    # carries 10.55.0.1 (ConfigureWithoutCarrier=yes in
+    # /etc/systemd/network/10-zero-rndis.network), so no long
+    # host-readiness wait is needed.
+    echo "Dev netboot: TFTP -> slot A"
+    sleep 3
     mmc dev 0
     part start mmc 0 2 slot_a_start
 
-    # Each TFTP-then-write block is gated on TFTP success. A failed TFTP
-    # MUST NOT trigger a write — that would corrupt the slot / FAT file
-    # with stale ${loadaddr} contents.
+    # Each TFTP-then-write block is gated on TFTP success — a failed
+    # TFTP MUST NOT trigger a write, that would corrupt the slot / FAT
+    # file with stale ${loadaddr} contents.
     setenv dev_ok 1
 
     if tftp ${loadaddr} pizero/rootfs.squashfs; then
@@ -64,13 +63,6 @@ if test "${dev_netboot}" = "1"; then
     fi
     if test "${dev_ok}" = "1" && tftp ${loadaddr} pizero/initramfs.cpio.gz; then
         fatwrite mmc 0:1 ${loadaddr} initramfs.cpio.gz ${filesize}
-    fi
-    # boot.scr / uboot.env updates are optional — skip on failure but stay ok.
-    if test "${dev_ok}" = "1" && tftp ${loadaddr} pizero/boot.scr; then
-        fatwrite mmc 0:1 ${loadaddr} boot.scr ${filesize}
-    fi
-    if test "${dev_ok}" = "1" && tftp ${loadaddr} pizero/uboot.env; then
-        fatwrite mmc 0:1 ${loadaddr} uboot.env ${filesize}
     fi
 
     if test "${dev_ok}" = "1"; then

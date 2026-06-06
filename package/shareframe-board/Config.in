@@ -1,0 +1,14 @@
+config BR2_PACKAGE_SHAREFRAME_BOARD
+	bool "shareframe-board (application + dashboard)"
+	depends on BR2_INSTALL_LIBSTDCPP
+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_14
+	select BR2_PACKAGE_OPENSSL
+	select BR2_PACKAGE_SQLITECPP
+	select BR2_PACKAGE_SPDLOG
+	select BR2_PACKAGE_LIBGPIOD
+	help
+	  shareframe-application and shareframe-dashboard binaries
+	  built from the sibling repo at ../shareframe-board.
+	  Installs to /usr/bin, /etc/shareframe, /usr/share/shareframe.
+	  Per-device .env.secrets.toml lives on /data and is NOT
+	  installed by this package.

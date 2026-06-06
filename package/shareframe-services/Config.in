@@ -1,7 +1,0 @@
-config BR2_PACKAGE_SHAREFRAME_SERVICES
-	bool "shareframe-services"
-	select BR2_PACKAGE_HOST_SQUASHFS
-	help
-	  Bundles per-board C++ services into a single read-only squashfs
-	  at /opt/services.sqfs. Mounted at boot via mount-services-sqfs.
-	  Per-service writable overlays land on /data/services/<name>/upper.

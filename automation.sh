@@ -264,10 +264,6 @@ function deploy() {
         "$deploy_src_dir/rootfs.squashfs" \
         "$deploy_src_dir/initramfs.cpio.gz" \
         "$PI4B:/srv/tftp/pizero/"
-    # Optional: bootloader-side files (only present if produced).
-    for f in boot.scr uboot.env; do
-        [ -f "$deploy_src_dir/$f" ] && scp "$deploy_src_dir/$f" "$PI4B:/srv/tftp/pizero/"
-    done
 
     true
 }

@@ -3,7 +3,6 @@ mdev-netlink
 mount-data
 mount-boot
 bind-persistent-state
-mount-services-sqfs
 fake-hwclock-restore
 fake-hwclock-save
 load-brcmfmac
@@ -21,3 +20,6 @@ dhcpcd-wlan
 wifi-reachability-watch
 getty-ttyS1
 rauc-mark-good
+shareframe-data-dirs
+shareframe-application
+shareframe-dashboard
