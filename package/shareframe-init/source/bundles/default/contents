@@ -21,6 +21,7 @@ wifi-reachability-watch
 getty-ttyS1
 rauc-mark-good
 shareframe-data-dirs
+seed-shareframe-secrets
 shareframe-application
 shareframe-dashboard
 shareframe-heartbeat

@@ -1,9 +1,10 @@
 #!/bin/sh
 # Seed /data/shareframe/ subdirs for writable app state.
 # Runs once at boot, after mount-data has mounted /dev/mmcblk0p4 at /data.
-# .env.secrets.toml is per-device identity and is NOT seeded by firmware —
-# provisioning must place it at /data/shareframe/.env.secrets.toml before
-# shareframe-application / shareframe-dashboard can start.
+# .env.secrets.toml: the empty-valued skeleton is seeded by seed-shareframe-secrets
+# (a separate oneshot that depends on this one). Only the per-device identity VALUE
+# (ed25519_private_key) is filled in by provisioning before the device talks to the
+# backend; the file itself is present from first boot.
 set -e
 mkdir -p /data/shareframe/db /data/shareframe/images /data/shareframe/logs
 chmod 0750 /data/shareframe
