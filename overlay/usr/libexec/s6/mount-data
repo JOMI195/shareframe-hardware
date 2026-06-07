@@ -12,8 +12,7 @@ if ! mount -t ext4 "${DEV}" "${MNT}" 2>/dev/null; then
 fi
 
 # Seed the directory tree we rely on. Idempotent.
-mkdir -p "${MNT}/dropbear" "${MNT}/services" "${MNT}/rauc" "${MNT}/updates" \
-	"${MNT}/var-upper" "${MNT}/var-work"
+mkdir -p "${MNT}/dropbear" "${MNT}/services" "${MNT}/rauc" "${MNT}/updates"
 # /data/fake-hwclock is a FILE (epoch as text), written by fake-hwclock-save.
 # Do NOT mkdir it. Heal old layouts that mistakenly created it as a dir.
 [ -d "${MNT}/fake-hwclock" ] && rmdir "${MNT}/fake-hwclock" 2>/dev/null || true
