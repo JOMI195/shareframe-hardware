@@ -20,9 +20,17 @@ SHAREFRAME_BOARD_DEPENDENCIES = openssl sqlitecpp spdlog lgpio
 
 SHAREFRAME_BOARD_SUPPORTS_IN_SOURCE_BUILD = NO
 
+# SHAREFRAME_PROFILE: dev | prod (default) | prod.local. Exported by
+# automation.sh (env -> make var); -? default keeps bare `make` working.
+# Threaded into CMake so install() ships only the selected config.<profile>.toml
+# overlay (matched at runtime by the /etc/shareframe-profile the s6 run scripts
+# export). Must stay in sync with what post-build.sh writes to that file.
+SHAREFRAME_PROFILE ?= prod
+
 SHAREFRAME_BOARD_CONF_OPTS = \
 	-DENABLE_EPD_HARDWARE=OFF \
 	-DCMAKE_BUILD_TYPE=Release \
-	-DBUILD_SHARED_LIBS=OFF
+	-DBUILD_SHARED_LIBS=OFF \
+	-DSHAREFRAME_PROFILE=$(SHAREFRAME_PROFILE)
 
 $(eval $(cmake-package))

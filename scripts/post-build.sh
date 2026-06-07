@@ -31,3 +31,10 @@ echo "=== Post-build: /etc/fake-hwclock-default mit Build-Epoch geschrieben ==="
 MODE="${SHAREFRAME_MODE:-prod}"
 echo "${MODE}" > "$TARGET_DIR/etc/shareframe-mode"
 echo "=== Post-build: /etc/shareframe-mode=${MODE} ==="
+
+# SHAREFRAME_PROFILE: dev | prod | prod.local. The 60-app s6 run scripts read
+# this file and export it as SHAREFRAME_PROFILE, selecting the
+# /etc/shareframe/config.<profile>.toml overlay the app merges on config.toml.
+PROFILE="${SHAREFRAME_PROFILE:-prod}"
+echo "${PROFILE}" > "$TARGET_DIR/etc/shareframe-profile"
+echo "=== Post-build: /etc/shareframe-profile=${PROFILE} ==="

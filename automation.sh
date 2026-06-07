@@ -91,6 +91,19 @@ function buildroot() {
     export SHAREFRAME_MODE="${SHAREFRAME_MODE:-prod}"
     echo "=== SHAREFRAME_MODE=${SHAREFRAME_MODE} ==="
 
+    # SHAREFRAME_PROFILE: dev | prod (default) | prod.local. Picked up by:
+    #   - post-build.sh -> writes /etc/shareframe-profile (read by the 60-app
+    #     s6 run scripts, exported as SHAREFRAME_PROFILE into the app env)
+    # Selects which /etc/shareframe/config.<profile>.toml overlay the app merges
+    # on top of config.toml. The matching file must be installed by the
+    # shareframe-board package (CMakeLists install(FILES ...)).
+    export SHAREFRAME_PROFILE="${SHAREFRAME_PROFILE:-prod}"
+    case "${SHAREFRAME_PROFILE}" in
+        dev|prod|prod.local) ;;
+        *) echo "buildroot: invalid SHAREFRAME_PROFILE='${SHAREFRAME_PROFILE}' (use dev, prod, prod.local)" >&2; return 1 ;;
+    esac
+    echo "=== SHAREFRAME_PROFILE=${SHAREFRAME_PROFILE} ==="
+
     echo "=== Buildroot herunterladen und entpacken ==="
     local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
     local sig_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz.sign"
