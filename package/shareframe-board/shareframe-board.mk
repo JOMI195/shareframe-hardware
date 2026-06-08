@@ -27,8 +27,18 @@ SHAREFRAME_BOARD_SUPPORTS_IN_SOURCE_BUILD = NO
 # export). Must stay in sync with what post-build.sh writes to that file.
 SHAREFRAME_PROFILE ?= prod
 
+# SHAREFRAME_EPD: ON | OFF (default). Exported by automation.sh from the
+# config.env (env -> make var); -? default keeps bare `make` working. ON links
+# the waveshare e-Paper driver (external/waveshare, real SPI/GPIO) — needs the
+# SPI/spidev kernel fragment (fragments/kernel-spi.fragment) and the
+# spi0-spidev.dtbo overlay, both already shipped. OFF builds the no-op
+# DisplayManager fallback. CMake caches the option: switch value -> a
+# shareframe-board-dirclean is required (automation rebuild loop does
+# -reconfigure, so flip via env then full build, or dirclean first).
+SHAREFRAME_EPD ?= OFF
+
 SHAREFRAME_BOARD_CONF_OPTS = \
-	-DENABLE_EPD_HARDWARE=OFF \
+	-DENABLE_EPD_HARDWARE=$(SHAREFRAME_EPD) \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DBUILD_SHARED_LIBS=OFF \
 	-DSHAREFRAME_PROFILE=$(SHAREFRAME_PROFILE)

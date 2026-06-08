@@ -16,15 +16,26 @@
 	 * with owner "20204000.spi" while alt0 already holds them with owner
 	 * "20200000.gpio" -> mux conflict: "pin gpio9 already requested by
 	 * 20200000.gpio; cannot claim for 20204000.spi" and the controller setup
-	 * aborts. Likewise no cs-gpios: spi-bcm2835.c converts native CS0/CS1 to
-	 * GPIO8/GPIO7 itself (GPIO_LOOKUP "pinctrl-bcm2835", 8-cs) via the gpio
-	 * path, which does not collide with the alt0 mux. */
+	 * aborts.
+	 *
+	 * We DO declare cs-gpios though (see below). If omitted, spi-bcm2835.c
+	 * auto-converts the native CS0/CS1 to GPIO8/GPIO7 with ACTIVE_HIGH
+	 * polarity (dmesg "setting up native-CSx to use GPIO"): CE0 then idles
+	 * LOW and is driven HIGH during a transfer, so active-low SPI devices
+	 * (Waveshare e-Paper on CE0) are never selected and ignore all data ->
+	 * blank panel. Explicit active-low cs-gpios fix the polarity without
+	 * re-muxing 9/10/11 (the gpio CS path already moves 7/8 off alt0). */
 	fragment@0 {
 		target = <&spi>;                 /* mainline labels the spi0 controller "spi" */
 		__overlay__ {
 			#address-cells = <1>;
 			#size-cells = <0>;
 			status = "okay";
+
+			/* 1 = GPIO_ACTIVE_LOW. reg=0 -> 1st entry GPIO8/CE0 ->
+			 * spidev0.0; reg=1 -> GPIO7/CE1 -> spidev0.1. Literal 1
+			 * (not GPIO_ACTIVE_LOW): dtc runs without the C preprocessor. */
+			cs-gpios = <&gpio 8 1>, <&gpio 7 1>;
 
 			spidev0: spidev@0 {
 				compatible = "rohm,dh2228fv";     /* whitelisted; bare "spidev" is rejected */
