@@ -1,0 +1,15 @@
+ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=0
+update_config=1
+country=DE
+
+# Beispiel-Seed. Auf erstem Boot kopiert seed-wifi-config diese Datei nach
+# /data/wifi/wpa_supplicant.conf (nur falls dort noch keine existiert).
+# Echte Netze hier eintragen (ein network={...}-Block pro WLAN).
+# WICHTIG: in configs/example (getrackt) NIE echte Credentials — nur in einem
+# kopierten, gitignored configs/<kunde>/.
+#
+#network={
+#    ssid="MEIN_WLAN"
+#    psk="GEHEIMES_PASSWORT"
+#}

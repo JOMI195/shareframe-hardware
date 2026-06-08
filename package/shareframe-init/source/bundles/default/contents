@@ -18,10 +18,13 @@ ntpd
 wpa_supplicant
 dhcpcd-wlan
 wifi-reachability-watch
+wait-network-online
 getty-ttyS1
+nginx
 rauc-mark-good
 shareframe-data-dirs
 seed-shareframe-secrets
 shareframe-application
+wait-shareframe-ready
 shareframe-dashboard
 shareframe-heartbeat

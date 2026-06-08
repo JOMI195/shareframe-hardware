@@ -58,6 +58,7 @@ mkdir -p "${BINARIES_DIR}/boot/A" "${BINARIES_DIR}/boot/B"
 for slot in A B; do
 	[ -f "${BINARIES_DIR}/zImage" ]                  && cp "${BINARIES_DIR}/zImage"                  "${BINARIES_DIR}/boot/${slot}/zImage"
 	[ -f "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb" ]  && cp "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb"  "${BINARIES_DIR}/boot/${slot}/bcm2835-rpi-zero-w.dtb"
+	[ -f "${BINARIES_DIR}/spi0-spidev.dtbo" ]        && cp "${BINARIES_DIR}/spi0-spidev.dtbo"        "${BINARIES_DIR}/boot/${slot}/spi0-spidev.dtbo"
 done
 
 # 4. Build the FAT contents list.

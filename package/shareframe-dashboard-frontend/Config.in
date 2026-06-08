@@ -1,0 +1,10 @@
+config BR2_PACKAGE_SHAREFRAME_DASHBOARD_FRONTEND
+	bool "shareframe-dashboard-frontend (static web UI)"
+	select BR2_PACKAGE_NGINX
+	help
+	  React dashboard built with Vite at firmware-build time and
+	  installed to /usr/share/shareframe/dashboard-frontend, served by
+	  nginx on port 80. nginx reverse-proxies /api/ to the local
+	  dashboard backend on 127.0.0.1:8080.
+
+	  Built from the sibling repo at ../shareframe-board/dashboard-frontend.

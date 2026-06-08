@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dienst nicht erreichbar — shareframe</title>
+    <style>
+        :root {
+            --bg: #F2F2F2;
+            --surface: #ffffff;
+            --text: #2c1212;
+            --muted: #6b6b6b;
+            --accent: #8b5cf6;
+            --border: rgba(0, 0, 0, 0.08);
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #252627;
+                --surface: #2f3031;
+                --text: #fffdfd;
+                --muted: #a8a8a8;
+                --accent: #8b5cf6;
+                --border: rgba(255, 255, 255, 0.08);
+            }
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+                Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            -webkit-font-smoothing: antialiased;
+        }
+        .card {
+            width: 100%;
+            max-width: 480px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px 32px;
+            text-align: center;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+        }
+        .illustration {
+            width: 220px;
+            max-width: 60%;
+            height: auto;
+            margin: 0 auto 8px;
+            display: block;
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 16px 0 8px;
+            letter-spacing: -0.01em;
+        }
+        p {
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.55;
+            margin: 0 auto 24px;
+            max-width: 36ch;
+        }
+        .actions {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            appearance: none;
+            border: none;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 600;
+            padding: 10px 22px;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #ffffff;
+            transition: filter 0.15s ease;
+        }
+        .btn:hover { filter: brightness(1.08); }
+        .status {
+            margin-top: 18px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.35; transform: scale(0.85); }
+            50%      { opacity: 1;    transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <img class="illustration" src="/error-assets/frame-3d-no-data.svg" alt="" aria-hidden="true">
+        <h1>Dienst nicht erreichbar</h1>
+        <p>
+            Der shareframe-Dienst ist gerade nicht verfügbar. Das Gerät läuft
+            noch — der Dienst startet vermutlich neu. Bitte einen Moment warten.
+        </p>
+        <div class="actions">
+            <button class="btn" onclick="location.reload()">Erneut versuchen</button>
+        </div>
+        <div class="status">
+            <span class="dot"></span>
+            <span>Verbindung wird automatisch wiederhergestellt …</span>
+        </div>
+    </main>
+
+    <script>
+        // Poll the backend health endpoint; reload automatically once it's back.
+        (function () {
+            var TRIES_DELAY = 4000;
+            function check() {
+                fetch('/api/system/health', { cache: 'no-store' })
+                    .then(function (r) { if (r.ok) { location.reload(); } else { schedule(); } })
+                    .catch(schedule);
+            }
+            function schedule() { setTimeout(check, TRIES_DELAY); }
+            schedule();
+        })();
+    </script>
+</body>
+</html>

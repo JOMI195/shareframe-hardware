@@ -1,0 +1,5 @@
+#!/bin/sh
+# nginx reverse proxy: static dashboard SPA on :80 + /api/ -> 127.0.0.1:8080.
+# Rootfs is read-only; create nginx's tmpfs scratch dir before launch.
+mkdir -p /tmp/nginx
+exec nginx -g 'daemon off;'

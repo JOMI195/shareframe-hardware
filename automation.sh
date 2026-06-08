@@ -84,6 +84,7 @@ function toolchain() {
 
 function buildroot() {
     local config="buildroot-rpi0w"
+    local config_dir="${1:-}"
 
     # SHAREFRAME_MODE: dev | prod (default). Picked up by:
     #   - post-image.sh -> sets dev_netboot=0|1 in compiled uboot.env
@@ -119,9 +120,35 @@ function buildroot() {
       BR2_DEFCONFIG="$(realpath "$(dirname "$src_dir")/${config}.conf")" \
       BR2_EXTERNAL="$(realpath .)" \
       defconfig
+
+    # Config-Ordner: privaten 2. Overlay registrieren + externe Pfade als local.mk.
+    # local.mk wird jeden Build neu/leer geschrieben, damit kein Override vom
+    # Vorbuild haengen bleibt. Buildroot liest $(CONFIG_DIR)/local.mk automatisch
+    # (= $src_dir/local.mk beim in-tree-Build).
+    : > "$src_dir/local.mk"
+    if [ -n "$config_dir" ] && [ -d "$config_dir/overlay" ]; then
+        # Last-wins in Kconfig -> diese Zeile ueberschreibt das BR2_ROOTFS_OVERLAY
+        # der defconfig; getracktes ../../overlay bleibt erster Overlay, der
+        # Config-Overlay ergaenzt/ueberschreibt darueber.
+        printf 'BR2_ROOTFS_OVERLAY="../../overlay %s"\n' \
+            "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
+        echo "=== 2. Overlay: $(realpath "$config_dir/overlay") ==="
+    fi
+    if [ -n "${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-}" ]; then
+        printf 'SHAREFRAME_BOARD_OVERRIDE_SRCDIR = %s\n' \
+            "$SHAREFRAME_BOARD_OVERRIDE_SRCDIR" >> "$src_dir/local.mk"
+        echo "=== Override shareframe-board: $SHAREFRAME_BOARD_OVERRIDE_SRCDIR ==="
+    fi
+    if [ -n "${SHAREFRAME_DASHBOARD_FRONTEND_OVERRIDE_SRCDIR:-}" ]; then
+        printf 'SHAREFRAME_DASHBOARD_FRONTEND_OVERRIDE_SRCDIR = %s\n' \
+            "$SHAREFRAME_DASHBOARD_FRONTEND_OVERRIDE_SRCDIR" >> "$src_dir/local.mk"
+        echo "=== Override dashboard-frontend: $SHAREFRAME_DASHBOARD_FRONTEND_OVERRIDE_SRCDIR ==="
+    fi
+
     make -C "$src_dir" olddefconfig
 
     echo "=== Buildroot bauen ==="
+    make -C "$src_dir" rpi-firmware-dirclean
     make -C "$src_dir" shareframe-init-dirclean
     make -C "$src_dir" linux-reconfigure
     for mk in modules/*/*.mk package/*/*.mk; do
@@ -129,6 +156,14 @@ function buildroot() {
         grep -qF 'eval $(host-' "$mk" && continue
         make -C "$src_dir" "$(basename "$mk" .mk)-reconfigure"
     done
+
+    # Leak-Schutz beim Kundenwechsel: TARGET_DIR wird zwischen inkrementellen
+    # Builds nicht geleert und die .default-Seeds kommen per Overlay (kein Paket
+    # -> kein dirclean). Bekannte sicherheitskritische Seed-Pfade entfernen; der
+    # aktive Config-Overlay legt sie neu an, sonst faellt das Seed-Skript auf das
+    # getrackte .template zurueck.
+    rm -f "$src_dir/output/target/usr/share/shareframe/.env.secrets.toml.default" \
+          "$src_dir/output/target/usr/share/shareframe/wpa_supplicant.conf.default"
 
     make -C "$src_dir" -j"$(nproc)"
 
@@ -144,6 +179,7 @@ function buildroot() {
     # nach einem dev-mode reboot wirksam.
     cp "$img/zImage"                  artifacts/deploy/
     cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/deploy/
+    [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" artifacts/deploy/
     cp "$img/rootfs.squashfs"         artifacts/deploy/
     cp "$img/initramfs.cpio.gz"       artifacts/deploy/
     [ -f "$img/boot.scr" ]      && cp "$img/boot.scr"      artifacts/deploy/
@@ -262,13 +298,30 @@ function clean() {
 function build() {
   echo "=== Bauen==="
 
+  # Optionaler Config-Ordner: ./automation.sh build configs/<kunde>
+  # Buendelt Mode/Profile, Pfade zu externen Projekten (config.env) und einen
+  # privaten 2. Overlay (<configdir>/overlay) mit Secrets/WLAN. Ohne Argument
+  # bleibt das bisherige Verhalten (Env-Defaults, getrackte .template).
+  local config_dir="${1:-}"
+  if [ -n "$config_dir" ]; then
+      config_dir="${config_dir%/}"
+      [ -d "$config_dir" ] || { echo "build: config dir '$config_dir' not found" >&2; return 1; }
+      [ -f "$config_dir/config.env" ] || { echo "build: '$config_dir/config.env' not found" >&2; return 1; }
+      echo "=== Config: $config_dir ==="
+      # config.env setzt SHAREFRAME_MODE/PROFILE, optionale *_OVERRIDE_SRCDIR und
+      # SHAREFRAME_CONFIG_LABEL. set -a exportiert sie, sodass buildroot() und die
+      # Buildroot-Skripte (post-build.sh) sie aus der Umgebung lesen.
+      # shellcheck disable=SC1090,SC1091
+      set -a; . "$config_dir/config.env"; set +a
+  fi
+
   local sha
   sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   printf 'CONFIG_LOCALVERSION="-%s"\n' "$sha" > fragments/kernel-localversion.fragment
   export BUILD_SHA="$sha"
 
   toolchain
-  buildroot
+  buildroot "$config_dir"
 }
 
 function deploy() {
@@ -280,6 +333,7 @@ function deploy() {
     scp \
         "$deploy_src_dir/zImage" \
         "$deploy_src_dir/bcm2835-rpi-zero-w.dtb" \
+        "$deploy_src_dir/spi0-spidev.dtbo" \
         "$deploy_src_dir/rootfs.squashfs" \
         "$deploy_src_dir/initramfs.cpio.gz" \
         "$PI4B:/srv/tftp/pizero/"

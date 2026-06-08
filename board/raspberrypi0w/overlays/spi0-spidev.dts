@@ -1,0 +1,42 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	/* Enable SPI0 + expose spidev on CE0 (spidev0.0) and CE1 (spidev0.1).
+	 *
+	 * NO pinctrl / no pin group here on purpose. The mainline bcm2835 gpio
+	 * controller applies its OWN default pinctrl state at boot (gpio node:
+	 * pinctrl-0 = <&gpioout &alt0>), and `alt0` already muxes pins
+	 * 4 5 7 8 9 10 11 to ALT0. So MISO/MOSI/SCLK (9/10/11) and CE0/CE1
+	 * (8/7) are ALREADY in SPI ALT0 function before this controller probes.
+	 *
+	 * Adding a pinctrl-0 to the spi node here would try to re-mux 9/10/11
+	 * with owner "20204000.spi" while alt0 already holds them with owner
+	 * "20200000.gpio" -> mux conflict: "pin gpio9 already requested by
+	 * 20200000.gpio; cannot claim for 20204000.spi" and the controller setup
+	 * aborts. Likewise no cs-gpios: spi-bcm2835.c converts native CS0/CS1 to
+	 * GPIO8/GPIO7 itself (GPIO_LOOKUP "pinctrl-bcm2835", 8-cs) via the gpio
+	 * path, which does not collide with the alt0 mux. */
+	fragment@0 {
+		target = <&spi>;                 /* mainline labels the spi0 controller "spi" */
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			spidev0: spidev@0 {
+				compatible = "rohm,dh2228fv";     /* whitelisted; bare "spidev" is rejected */
+				reg = <0>;
+				spi-max-frequency = <20000000>;
+			};
+
+			spidev1: spidev@1 {
+				compatible = "rohm,dh2228fv";
+				reg = <1>;
+				spi-max-frequency = <20000000>;
+			};
+		};
+	};
+};

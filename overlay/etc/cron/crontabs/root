@@ -1,0 +1,3 @@
+# Monthly reboot: 04:00 on the 1st of every month.
+# Use the s6-linux-init reboot (clean rc.shutdown), NOT busybox /sbin/reboot.
+0 4 1 * * /etc/s6-linux-init/current/bin/reboot

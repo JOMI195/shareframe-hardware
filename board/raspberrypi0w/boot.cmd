@@ -61,6 +61,9 @@ if test "${dev_netboot}" = "1"; then
     if test "${dev_ok}" = "1" && tftp ${loadaddr} pizero/bcm2835-rpi-zero-w.dtb; then
         fatwrite mmc 0:1 ${loadaddr} boot/A/bcm2835-rpi-zero-w.dtb ${filesize}
     fi
+    if test "${dev_ok}" = "1" && tftp ${loadaddr} pizero/spi0-spidev.dtbo; then
+        fatwrite mmc 0:1 ${loadaddr} boot/A/spi0-spidev.dtbo ${filesize}
+    fi
     if test "${dev_ok}" = "1" && tftp ${loadaddr} pizero/initramfs.cpio.gz; then
         fatwrite mmc 0:1 ${loadaddr} initramfs.cpio.gz ${filesize}
     fi
@@ -109,6 +112,21 @@ echo "Booting slot ${slot} (mmcblk0p${slot_part})"
 fatload mmc 0:1 ${kernel_addr_r}  boot/${slot}/zImage
 fatload mmc 0:1 ${fdt_addr_r}     boot/${slot}/bcm2835-rpi-zero-w.dtb
 fatload mmc 0:1 ${ramdisk_addr_r} initramfs.cpio.gz
+# Capture the ramdisk size NOW: the spi0-spidev.dtbo fatload below overwrites
+# ${filesize}, and bootz needs the initramfs size, not the overlay's.
+setenv ramdisk_size ${filesize}
+
+# Enable SPI0 + spidev: apply the per-slot DT overlay onto the loaded base dtb
+# (mainline bcm2835-rpi-zero-w.dtb ships spi0 disabled). fdt resize first since
+# the loaded blob has no slack; fdt apply needs base __symbols__ (present).
+fdt addr ${fdt_addr_r}
+fdt resize 0x2000
+if fatload mmc 0:1 ${dtbo_addr_r} boot/${slot}/spi0-spidev.dtbo; then
+    echo "Applying SPI overlay (slot ${slot})"
+    fdt apply ${dtbo_addr_r}
+else
+    echo "WARN: boot/${slot}/spi0-spidev.dtbo missing; SPI stays disabled"
+fi
 
 setenv bootargs "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/mmcblk0p${slot_part} rootfstype=squashfs ro rauc.slot=${slot}"
-bootz ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr_r}
+bootz ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}

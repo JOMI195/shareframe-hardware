@@ -78,3 +78,10 @@ wpa_supplicant.conf.default
 # RAUC dev signing keys (regenerate via scripts/gen-dev-keys.sh)
 package/shareframe-rauc/files/*.pem
 package/shareframe-rauc/files/*.srl
+
+# Per-customer deploy configs (privat). Nur das Beispiel ist getrackt; die
+# Negation muss UNTER den Secret-Patterns oben stehen (spaetere Regel gewinnt),
+# damit configs/example/.../.default re-included wird.
+configs/*
+!configs/example/
+!configs/example/**

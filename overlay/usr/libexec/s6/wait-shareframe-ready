@@ -1,0 +1,19 @@
+#!/bin/sh
+# Gate: block until shareframe-application is ready, i.e. its IPC socket exists.
+# The socket appears only after the app has opened+migrated the DB and started
+# its IpcServer, so this is a clean "application main ok" readiness proxy.
+# Bounded: after TIMEOUT we continue anyway — the DB busy_timeout and the
+# IpcClient auto-retry in dashboard/heartbeat handle a still-missing socket.
+SOCK=/tmp/shareframe-ipc.sock
+TIMEOUT=60
+
+i=0
+while [ ! -S "$SOCK" ]; do
+    i=$((i + 1))
+    if [ "$i" -ge "$TIMEOUT" ]; then
+        echo "wait-shareframe-ready: $SOCK not up after ${TIMEOUT}s; continuing" > /dev/console
+        exit 0
+    fi
+    sleep 1
+done
+exit 0

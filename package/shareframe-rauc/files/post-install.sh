@@ -32,7 +32,7 @@ for slot in ${RAUC_TARGET_SLOTS}; do
 
 	mkdir -p "/boot/${bn}"
 	# Atomic-ish: write to .new then rename.
-	for f in zImage bcm2835-rpi-zero-w.dtb; do
+	for f in zImage bcm2835-rpi-zero-w.dtb spi0-spidev.dtbo; do
 		if [ -f "${tmp}/boot/${f}" ]; then
 			cp "${tmp}/boot/${f}" "/boot/${bn}/${f}.new"
 			mv "/boot/${bn}/${f}.new" "/boot/${bn}/${f}"

@@ -10,6 +10,9 @@ echo "=== Post-build: Build-Stempel erzeugen ==="
     echo "built_at=$(date --iso-8601=seconds)"
     echo "built_by=$(whoami)@$(hostname)"
     echo "git_commit=${BUILD_SHA:-unknown}"
+    # config_label: aus configs/<kunde>/config.env (SHAREFRAME_CONFIG_LABEL),
+    # leer beim arglosen Build. Zeigt am Image, mit welcher Config gebaut wurde.
+    echo "config_label=${SHAREFRAME_CONFIG_LABEL:-}"
 } > "$TARGET_DIR/etc/build-info"
 
 echo "=== Post-build: /etc/build-info geschrieben ==="
@@ -38,3 +41,18 @@ echo "=== Post-build: /etc/shareframe-mode=${MODE} ==="
 PROFILE="${SHAREFRAME_PROFILE:-prod}"
 echo "${PROFILE}" > "$TARGET_DIR/etc/shareframe-profile"
 echo "=== Post-build: /etc/shareframe-profile=${PROFILE} ==="
+
+# Compile the SPI DT overlay into /boot so it ships inside the squashfs slot.
+# RAUC post-install.sh then syncs it to FAT /boot/<slot>/ on every update,
+# exactly like zImage + bcm2835-rpi-zero-w.dtb -> per-slot, rollback-safe.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+OVERLAY_SRC="${SCRIPT_DIR}/../board/raspberrypi0w/overlays/spi0-spidev.dts"
+DTC="${HOST_DIR}/bin/dtc"
+if [ -x "${DTC}" ] && [ -f "${OVERLAY_SRC}" ]; then
+    mkdir -p "${TARGET_DIR}/boot"
+    "${DTC}" -@ -I dts -O dtb -o "${TARGET_DIR}/boot/spi0-spidev.dtbo" "${OVERLAY_SRC}"
+    # Also into BINARIES_DIR so post-image.sh stages it into FAT boot/A,B for
+    # the initial flash (RAUC takes over per-slot thereafter).
+    [ -n "${BINARIES_DIR:-}" ] && cp "${TARGET_DIR}/boot/spi0-spidev.dtbo" "${BINARIES_DIR}/spi0-spidev.dtbo"
+    echo "=== Post-build: spi0-spidev.dtbo compiled into /boot ==="
+fi

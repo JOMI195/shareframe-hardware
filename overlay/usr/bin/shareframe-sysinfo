@@ -1,0 +1,81 @@
+#!/bin/sh
+# shareframe-sysinfo — emit board system metrics as `key=value` lines (one per
+# line). Board-specific reads (thermal path, iface names, /data mount, busybox
+# vs full tools) live HERE in the firmware repo so the C++ dashboard stays
+# board-agnostic: it runs this and parses the output. A metric whose source is
+# absent is simply omitted — the dashboard treats a missing key as null.
+#
+# Intentionally no `set -e`: one unavailable source must not drop the rest.
+
+IFACE=wlan0
+
+emit() { printf '%s=%s\n' "$1" "$2"; }
+
+# --- identity / clock ---
+emit hostname "$(hostname 2>/dev/null)"
+emit kernel "$(uname -sr 2>/dev/null)"
+# %z keeps this busybox-safe (GNU -Iseconds isn't always compiled in).
+emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
+
+# --- uptime (seconds) ---
+[ -r /proc/uptime ] && emit uptime_seconds "$(awk '{printf "%d", $1}' /proc/uptime)"
+
+# --- memory (bytes) ---
+[ -r /proc/meminfo ] && awk '
+	/^MemTotal:/     { printf "ram_total_bytes=%d\n",     $2 * 1024 }
+	/^MemAvailable:/ { printf "ram_available_bytes=%d\n", $2 * 1024 }
+' /proc/meminfo
+
+# --- storage (bytes) for /data (writable) and / (rootfs) ---
+storage() {  # $1=mountpoint  $2=key prefix
+	df -k "$1" 2>/dev/null | awk -v p="$2" 'NR==2 {
+		printf "%s_total_bytes=%d\n", p, $2 * 1024
+		printf "%s_free_bytes=%d\n",  p, $4 * 1024
+	}'
+}
+storage /data storage_data
+storage /     storage_root
+
+# --- CPU temperature (°C); thermal zone may be absent on this kernel ---
+TZ_TEMP=/sys/class/thermal/thermal_zone0/temp
+[ -r "$TZ_TEMP" ] && awk '{ printf "cpu_temp_celsius=%.1f\n", $1 / 1000 }' "$TZ_TEMP"
+
+# --- load average ---
+if [ -r /proc/loadavg ]; then
+	read -r l1 l5 l15 _rest < /proc/loadavg
+	emit load_1 "$l1"
+	emit load_5 "$l5"
+	emit load_15 "$l15"
+fi
+
+# --- CPU usage % (two /proc/stat samples) ---
+if [ -r /proc/stat ]; then
+	set -- $(awk '/^cpu /{ print $2,$3,$4,$5,$6,$7,$8; exit }' /proc/stat)
+	idle1=$4;  total1=$(( $1 + $2 + $3 + $4 + $5 + $6 + $7 ))
+	sleep 0.2 2>/dev/null || sleep 1
+	set -- $(awk '/^cpu /{ print $2,$3,$4,$5,$6,$7,$8; exit }' /proc/stat)
+	idle2=$4;  total2=$(( $1 + $2 + $3 + $4 + $5 + $6 + $7 ))
+	dt=$(( total2 - total1 ));  di=$(( idle2 - idle1 ))
+	[ "$dt" -gt 0 ] && emit cpu_usage_percent \
+		"$(awk -v dt="$dt" -v di="$di" 'BEGIN { printf "%.1f", (1 - di / dt) * 100 }')"
+fi
+
+# --- IPv4 addresses ---
+ipv4() {  # $1=iface  $2=key
+	addr=$(ip -4 addr show "$1" 2>/dev/null | awk '/[[:space:]]inet /{ print $2; exit }' | cut -d/ -f1)
+	[ -n "$addr" ] && emit "$2" "$addr"
+}
+ipv4 "$IFACE" ip_wlan0
+ipv4 usb0     ip_usb0
+
+# --- WLAN signal (dBm) + link state ---
+[ -r /proc/net/wireless ] && awk -v ifc="$IFACE" '
+	$1 ~ ("^" ifc ":") { lvl = $4; sub(/\./, "", lvl); printf "wlan_signal_dbm=%d\n", lvl }
+' /proc/net/wireless
+
+OPER="/sys/class/net/${IFACE}/operstate"
+if [ -r "$OPER" ]; then
+	[ "$(cat "$OPER")" = "up" ] && emit wlan_connected true || emit wlan_connected false
+fi
+
+exit 0
