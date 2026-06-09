@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+LED=/sys/class/leds/ACT
+die() { printf 'shareframe-led: %s\n' "$*" >&2; exit 1; }
+[ $# -eq 1 ] || die "usage: shareframe-led <state>"
+[ -d "$LED" ] || die "ACT LED not found"
+
+case "$1" in
+    booting)
+        echo heartbeat > "$LED/trigger" ;;
+    normal)
+        echo mmc0 > "$LED/trigger" ;;
+    wifi-connecting)
+        echo timer > "$LED/trigger"
+        echo 100   > "$LED/delay_on"
+        echo 100   > "$LED/delay_off" ;;
+    wifi-down)
+        echo timer > "$LED/trigger"
+        echo 500   > "$LED/delay_on"
+        echo 2000  > "$LED/delay_off" ;;
+    error)
+        echo none > "$LED/trigger"
+        echo 1    > "$LED/brightness" ;;
+    updating)
+        echo timer > "$LED/trigger"
+        echo 50    > "$LED/delay_on"
+        echo 50    > "$LED/delay_off" ;;
+    off)
+        echo none > "$LED/trigger"
+        echo 0    > "$LED/brightness" ;;
+    *) die "unknown state: $1" ;;
+esac

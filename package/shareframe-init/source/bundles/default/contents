@@ -1,5 +1,6 @@
 mdev
 mdev-netlink
+setup-led
 mount-data
 mount-boot
 bind-persistent-state
@@ -31,3 +32,4 @@ shareframe-display
 shareframe-dashboard
 shareframe-websocket
 shareframe-heartbeat
+boot-complete

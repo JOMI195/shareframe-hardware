@@ -16,6 +16,7 @@ while true; do
     if ping -c1 -W1 "$TARGET_IP" >/dev/null 2>&1; then
         if [ "$failures" -ne 0 ]; then
             log "reachable again; reset backoff"
+            shareframe-led normal 2>/dev/null || true
         fi
         failures=0
         sleep_s=$BASE_INTERVAL
@@ -23,6 +24,7 @@ while true; do
         failures=$((failures + 1))
         if [ "$failures" -ge "$FAIL_LIMIT" ]; then
             log "unreachable (${failures}/${FAIL_LIMIT}); restarting wifi stack"
+            shareframe-led wifi-down 2>/dev/null || true
             if [ -x /usr/libexec/s6/wifi-stack-restart ]; then
                 /usr/libexec/s6/wifi-stack-restart "reachability-$TARGET_IP" || log "wifi-stack-restart failed"
             else
