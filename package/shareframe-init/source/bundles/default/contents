@@ -15,6 +15,7 @@ syslogd
 klogd
 crond
 watchdog
+earlyoom
 dropbear
 ntpd
 wpa_supplicant
@@ -35,4 +36,5 @@ shareframe-display
 shareframe-dashboard
 shareframe-websocket
 shareframe-heartbeat
+shareframe-health
 boot-complete

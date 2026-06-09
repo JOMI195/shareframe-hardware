@@ -1,0 +1,8 @@
+#!/bin/sh
+# Pre-OOM killer: SIGTERM the biggest hog at 12% / SIGKILL at 6% available RAM,
+# before the kernel OOM-killer locks the board up. -N funnels kills into the
+# shareframe-health reporting surface. No swap on this board, so -s is omitted.
+# --avoid protects init/supervision/network so earlyoom never kills plumbing.
+exec earlyoom -m 12,6 -r 60 \
+	--avoid '^(s6-|s6-rc|s6-supervise|init|getty|dropbear|wpa_supplicant|dhcpcd|watchdog)' \
+	-N /usr/libexec/s6/earlyoom-notify

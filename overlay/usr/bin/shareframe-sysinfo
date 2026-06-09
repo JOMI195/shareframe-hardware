@@ -27,6 +27,9 @@ emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 # --- device power-cycle count (persisted across boots by shareframe-boot-count) ---
 [ -r /data/shareframe/boot_count ] && emit boot_count "$(cat /data/shareframe/boot_count 2>/dev/null)"
 
+# --- overall health (published by shareframe-health: ok|warn|critical) ---
+[ -r /run/shareframe/health ] && emit health_state "$(cat /run/shareframe/health 2>/dev/null)"
+
 # --- memory (bytes) ---
 [ -r /proc/meminfo ] && awk '
 	/^MemTotal:/     { printf "ram_total_bytes=%d\n",     $2 * 1024 }
