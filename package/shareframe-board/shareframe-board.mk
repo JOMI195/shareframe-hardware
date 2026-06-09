@@ -2,9 +2,11 @@
 #
 # shareframe-board
 #
-# C++23 applications (shareframe-application + shareframe-dashboard) packaged
+# C++23 services (shareframe-display, shareframe-websocket, shareframe-dashboard,
+# shareframe-heartbeat) plus the shareframe-migrate DB-setup oneshot, packaged
 # from the sibling repo at ../shareframe-board. Built via Buildroot's
-# cmake-package infra so the toolchain file is injected automatically.
+# cmake-package infra so the toolchain file is injected automatically;
+# install(TARGETS) in CMakeLists drives which binaries ship.
 #
 # Override the source path during dev with:
 #   make shareframe-board-rebuild SHAREFRAME_BOARD_OVERRIDE_SRCDIR=/path/to/checkout

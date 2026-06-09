@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run pending DB migrations once, before any service starts. Exits non-zero on
+# failure so this oneshot fail-stops and dependent services are NOT brought up
+# against an unmigrated database. The same binary is the dev DB-setup tool.
+exec env SHAREFRAME_PROFILE="$(cat /etc/shareframe-profile 2>/dev/null || echo prod)" /usr/bin/shareframe-migrate

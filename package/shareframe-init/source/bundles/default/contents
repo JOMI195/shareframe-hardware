@@ -24,7 +24,9 @@ nginx
 rauc-mark-good
 shareframe-data-dirs
 seed-shareframe-secrets
-shareframe-application
-wait-shareframe-ready
+shareframe-db-migrate
+wait-time-synced
+shareframe-display
 shareframe-dashboard
+shareframe-websocket
 shareframe-heartbeat

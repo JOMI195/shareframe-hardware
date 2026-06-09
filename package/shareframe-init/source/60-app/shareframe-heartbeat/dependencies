@@ -1,2 +1,2 @@
-wait-shareframe-ready
-wait-network-online
+shareframe-db-migrate
+wait-time-synced
