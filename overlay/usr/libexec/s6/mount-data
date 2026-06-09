@@ -1,14 +1,31 @@
 #!/bin/sh
-# Mount /dev/mmcblk0p4 at /data (ext4). Format on first boot if no FS.
+# Mount /dev/mmcblk0p4 at /data (f2fs, pre-formatted by genimage). Repair before
+# mount; reformat ONLY when there is no valid f2fs there (corrupt beyond repair).
+# Never wipe a repairable filesystem — that is how power-loss glitches became
+# total data loss.
 set -e
 DEV=/dev/mmcblk0p4
 MNT=/data
+# noatime: drop atime metadata writes (wear + corruption window).
+# errors=remount-ro: stop compounding damage if the FS goes bad at runtime.
+# flush_merge + fsync_mode=strict: stronger durability for app fsyncs (SQLite).
+OPTS="noatime,errors=remount-ro,flush_merge,fsync_mode=strict"
 
 mkdir -p "${MNT}"
 
-if ! mount -t ext4 "${DEV}" "${MNT}" 2>/dev/null; then
-	mke2fs -t ext4 -F -L data "${DEV}"
-	mount -t ext4 "${DEV}" "${MNT}"
+# busybox blkid here is built without TYPE support, so fsck.f2fs is the probe:
+# it succeeds only on a valid f2fs superblock (auto-repairing if dirty), and
+# fails when the superblock is gone.
+format() { mkfs.f2fs -f -l data -O extra_attr,inode_checksum,sb_checksum "${DEV}"; }
+
+# Valid f2fs (repaired if needed)? else superblock lost -> reformat to recover.
+fsck.f2fs -a "${DEV}" >/dev/null 2>&1 || format
+
+if ! mount -t f2fs -o "${OPTS}" "${DEV}" "${MNT}"; then
+	# Has a superblock but still won't mount: force a full repair, retry once,
+	# and only then (last resort) reformat to recover a working device.
+	fsck.f2fs -f -y "${DEV}" >/dev/null 2>&1 || true
+	mount -t f2fs -o "${OPTS}" "${DEV}" "${MNT}" || { format; mount -t f2fs -o "${OPTS}" "${DEV}" "${MNT}"; }
 fi
 
 # Seed the directory tree we rely on. Idempotent.

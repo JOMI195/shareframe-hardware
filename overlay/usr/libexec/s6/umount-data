@@ -1,0 +1,6 @@
+#!/bin/sh
+# Clean f2fs shutdown: flush dirty pages and write a final checkpoint so the next
+# boot mounts a consistent filesystem with no recovery. Runs as the mount-data
+# oneshot's `down`, after every /data writer has been stopped (reverse dep order).
+sync
+umount /data 2>/dev/null || mount -o remount,ro /data 2>/dev/null || true

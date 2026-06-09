@@ -7,8 +7,8 @@ image boot.vfat {
 	size = 64M
 }
 
-image data.ext4 {
-	ext4 {
+image data.f2fs {
+	f2fs {
 		label = "data"
 	}
 	size = 256M
@@ -40,6 +40,6 @@ image sdcard.img {
 
 	partition data {
 		partition-type = 0x83
-		image = "data.ext4"
+		image = "data.f2fs"
 	}
 }

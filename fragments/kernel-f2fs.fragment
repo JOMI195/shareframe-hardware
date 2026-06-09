@@ -1,0 +1,8 @@
+# f2fs for the writable /data partition. Built in (=y, not a module): mount-data
+# runs in early 10-base before any module-load path and the root is squashfs/RAM.
+CONFIG_F2FS_FS=y
+CONFIG_F2FS_FS_XATTR=y
+CONFIG_F2FS_FS_POSIX_ACL=y
+CONFIG_F2FS_FS_SECURITY=y
+CONFIG_F2FS_STAT_FS=y
+CONFIG_F2FS_CHECK_FS=y

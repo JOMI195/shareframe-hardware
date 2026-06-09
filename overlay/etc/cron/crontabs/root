@@ -1,3 +1,7 @@
 # Monthly reboot: 04:00 on the 1st of every month.
 # Use the s6-linux-init reboot (clean rc.shutdown), NOT busybox /sbin/reboot.
 0 4 1 * * /etc/s6-linux-init/current/bin/reboot
+
+# Weekly TRIM of the f2fs /data partition: keep flash blocks healthy and writes
+# fast. Sunday 03:00, offset from the monthly reboot.
+0 3 * * 0 fstrim /data
