@@ -1,0 +1,13 @@
+#!/bin/sh
+# Increment a persistent power-cycle counter once per boot. Runs after
+# shareframe-data-dirs (which guarantees /data/shareframe exists). The value is
+# surfaced to the dashboard by shareframe-sysinfo as `boot_count`, giving a true
+# device power-cycle count independent of the application's own counters.
+set -e
+F=/data/shareframe/boot_count
+n=$(cat "$F" 2>/dev/null || echo 0)
+case "$n" in
+	''|*[!0-9]*) n=0 ;;
+esac
+n=$((n + 1))
+echo "$n" > "$F.tmp" && mv "$F.tmp" "$F"

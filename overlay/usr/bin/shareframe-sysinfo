@@ -20,6 +20,9 @@ emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 # --- uptime (seconds) ---
 [ -r /proc/uptime ] && emit uptime_seconds "$(awk '{printf "%d", $1}' /proc/uptime)"
 
+# --- device power-cycle count (persisted across boots by shareframe-boot-count) ---
+[ -r /data/shareframe/boot_count ] && emit boot_count "$(cat /data/shareframe/boot_count 2>/dev/null)"
+
 # --- memory (bytes) ---
 [ -r /proc/meminfo ] && awk '
 	/^MemTotal:/     { printf "ram_total_bytes=%d\n",     $2 * 1024 }

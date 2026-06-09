@@ -23,6 +23,7 @@ getty-ttyS1
 nginx
 rauc-mark-good
 shareframe-data-dirs
+shareframe-boot-count
 seed-shareframe-secrets
 shareframe-db-migrate
 wait-time-synced
