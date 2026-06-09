@@ -1,0 +1,44 @@
+#!/bin/sh
+# Seed /data/wifi/ap.conf (AP-fallback credentials) on first boot. Idempotent —
+# never overwrites an existing file so a customised/provisioned value survives
+# reboots and A/B slot switches.
+#
+# Source order:
+#   1. /usr/share/shareframe/ap.conf.default   (provisioned, gitignored)
+#   2. per-device derivation from the board serial (unique SSID + password)
+#   3. /usr/share/shareframe/ap.conf.template   (generic credless fallback)
+set -e
+DEST=/data/wifi/ap.conf
+
+mkdir -p /data/wifi
+[ -f "$DEST" ] && exit 0
+
+if [ -f /usr/share/shareframe/ap.conf.default ]; then
+	cp /usr/share/shareframe/ap.conf.default "$DEST"
+	chmod 0600 "$DEST"
+	exit 0
+fi
+
+# Per-device: derive a stable SSID suffix + WPA2 passphrase from the Pi serial.
+serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+if [ -n "$serial" ]; then
+	suffix="$(printf '%s' "$serial" | tail -c 4 | tr 'a-f' 'A-F')"
+	# Salt keeps the password from being a bare hash of a public serial.
+	pass="$(printf 'shareframe-ap:%s' "$serial" | sha256sum | cut -c1-10)"
+	{
+		echo "# Per-device AP-fallback credentials (derived from board serial)."
+		echo "AP_SSID=shareframe-board-${suffix}"
+		echo "AP_PASS=${pass}"
+	} > "$DEST"
+	chmod 0600 "$DEST"
+	exit 0
+fi
+
+if [ -f /usr/share/shareframe/ap.conf.template ]; then
+	cp /usr/share/shareframe/ap.conf.template "$DEST"
+	chmod 0600 "$DEST"
+	exit 0
+fi
+
+echo "seed-ap-config: no seed source found; $DEST not created" > /dev/console
+exit 0

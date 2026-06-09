@@ -18,6 +18,17 @@ case "$1" in
         echo timer > "$LED/trigger"
         echo 500   > "$LED/delay_on"
         echo 2000  > "$LED/delay_off" ;;
+    ap-mode)
+        # Distinct from every other state: three quick blinks then a long gap.
+        if [ -e "$LED/pattern" ]; then
+            echo pattern > "$LED/trigger"
+            echo "255 150 0 150 255 150 0 150 255 150 0 1200" > "$LED/pattern"
+        else
+            # No pattern trigger in this kernel: fall back to a slow even blink.
+            echo timer > "$LED/trigger"
+            echo 700   > "$LED/delay_on"
+            echo 300   > "$LED/delay_off"
+        fi ;;
     error)
         echo none > "$LED/trigger"
         echo 1    > "$LED/brightness" ;;

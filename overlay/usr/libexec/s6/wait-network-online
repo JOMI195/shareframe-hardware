@@ -8,6 +8,13 @@ TIMEOUT=120
 
 i=0
 while ! ping -c1 -W1 "$TARGET" >/dev/null 2>&1; do
+    # If wifi-mode-manager has fallen back to AP mode there is no upstream to
+    # reach: stop waiting so the app chain (heartbeat/websocket) starts now and
+    # the dashboard is served over the AP. Those services self-skip while offline.
+    if [ "$(cat /run/shareframe/wifi-mode 2>/dev/null)" = ap ]; then
+        echo "wait-network-online: board in AP mode; starting app chain now" > /dev/console
+        exit 0
+    fi
     i=$((i + 1))
     if [ "$i" -ge "$TIMEOUT" ]; then
         echo "wait-network-online: $TARGET unreachable after ${TIMEOUT}s; starting anyway" > /dev/console

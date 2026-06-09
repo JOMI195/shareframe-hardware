@@ -1,0 +1,189 @@
+#!/bin/sh
+# wifi-mode-manager — single owner of wlan0. Runs it as a station
+# (wpa_supplicant + dhcpcd-wlan) and, when no known network can be joined within
+# a grace window, falls back to hosting the shareframe-board access point
+# (hostapd + dnsmasq-ap) so the user can enter new wifi from the dashboard.
+# brcmfmac cannot do AP + station at once, so the two modes are mutually
+# exclusive and this daemon is the only thing that flips between them.
+#
+# Publishes the current mode to /run/shareframe/wifi-mode{,.json} for the
+# dashboard backend. Replaces wifi-reachability-watch (it owns monitoring too).
+set -u
+
+IFACE=wlan0
+SVC=/run/service
+STATE_DIR=/run/shareframe
+MODE_FILE="$STATE_DIR/wifi-mode"
+JSON_FILE="$STATE_DIR/wifi-mode.json"
+RETRY_FLAG="$STATE_DIR/wifi-retry-requested"
+SWITCH_FLAG="$STATE_DIR/wifi-switching"
+AP_CONF=/data/wifi/ap.conf
+
+ASSOC_TIMEOUT=45        # T1: wait for *association* before falling back to AP
+DHCP_GRACE=70           # after assoc, best-effort wait for an IP (no AP fallback)
+MONITOR_INTERVAL=30     # connected: ping / association check cadence
+AP_POLL=5               # ap: responsiveness to a dashboard retry request
+AP_RETRY_EVERY=120      # ap: seconds between automatic station retries
+DROP_LIMIT=3            # connected: failed assoc checks before re-evaluating
+WEDGE_BASE=4            # connected: no-internet checks before re-associating
+WEDGE_MAX=20            # connected: cap on the wedged-link backoff threshold
+
+log() { echo "wifi-mode-manager: $*" > /dev/console; }
+
+ap_creds() {
+	AP_SSID=shareframe-board
+	AP_PASS=
+	[ -f "$AP_CONF" ] && . "$AP_CONF"
+}
+
+have_assoc() { wpa_cli -i "$IFACE" status 2>/dev/null | grep -q '^wpa_state=COMPLETED'; }
+have_ip()    { ip -4 addr show "$IFACE" 2>/dev/null | grep -q 'inet '; }
+have_internet() { ping -c1 -W1 1.1.1.1 >/dev/null 2>&1; }
+cur_ssid() {
+	# Strip quotes/backslashes so the value is safe to embed in JSON.
+	wpa_cli -i "$IFACE" status 2>/dev/null | sed -n 's/^ssid=//p' | head -1 | tr -d '\\"'
+}
+
+write_mode() {
+	mode="$1"
+	mkdir -p "$STATE_DIR"
+	printf '%s\n' "$mode" > "$MODE_FILE"
+	ssid=""; internet=false
+	case "$mode" in
+		connected) ssid="$(cur_ssid)"; have_internet && internet=true ;;
+		connecting) ssid="$(cur_ssid)" ;;
+	esac
+	ap_creds
+	cat > "$JSON_FILE" <<EOF
+{"mode":"$mode","ssid":"$ssid","internet":$internet,"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS"}
+EOF
+}
+
+enter_connecting() {
+	log "mode -> connecting"
+	# We want the station back: let wpa_supplicant's finish-script self-heal
+	# (wifi-stack-restart) work again.
+	rm -f "$SWITCH_FLAG"
+	shareframe-ap down 2>/dev/null || true
+	s6-svc -u "$SVC/wpa_supplicant" 2>/dev/null || true
+	s6-svc -u "$SVC/dhcpcd-wlan"    2>/dev/null || true
+	shareframe-led wifi-connecting 2>/dev/null || true
+	write_mode connecting
+}
+
+# Decide station vs AP. AP fallback keys on *association* only (the true
+# "network gone" signal): if we can't associate within ASSOC_TIMEOUT, go AP.
+# Once associated we treat it as connected even if DHCP is still pending, so a
+# slow-but-valid network never triggers a false AP fallback. 0 = connected,
+# 1 = could not associate (-> AP).
+wait_for_sta() {
+	i=0
+	while [ "$i" -lt "$ASSOC_TIMEOUT" ]; do
+		have_assoc && break
+		sleep 2; i=$((i + 2))
+	done
+	have_assoc || return 1
+
+	# Associated: give DHCP a chance, but stay in station mode regardless.
+	i=0
+	while [ "$i" -lt "$DHCP_GRACE" ]; do
+		have_ip && break
+		have_assoc || return 1   # dropped association while waiting -> re-eval
+		sleep 2; i=$((i + 2))
+	done
+	return 0
+}
+
+enter_connected() {
+	log "mode -> connected (ssid=$(cur_ssid))"
+	shareframe-led normal 2>/dev/null || true
+	write_mode connected
+}
+
+enter_ap() {
+	log "mode -> ap (no known wifi joined)"
+	# Stop the station services and pin them down: this flag makes their
+	# finish-script (wifi-stack-restart) a no-op so they don't fight the switch.
+	: > "$SWITCH_FLAG"
+	s6-svc -d "$SVC/dhcpcd-wlan"    2>/dev/null || true
+	s6-svc -d "$SVC/wpa_supplicant" 2>/dev/null || true
+	shareframe-ap up
+	shareframe-led ap-mode 2>/dev/null || true
+	write_mode ap
+}
+
+# Stay connected; monitor association + reachability. Returns when association
+# is lost (caller re-evaluates, possibly falling back to AP). While associated
+# but unreachable it re-associates the stack (wedged-link recovery, with backoff
+# so a genuinely down WAN doesn't flap the link) — the job wifi-reachability-watch
+# used to do.
+monitor_connected() {
+	drops=0
+	wedge=0
+	wedge_limit=$WEDGE_BASE
+	while :; do
+		sleep "$MONITOR_INTERVAL"
+		if ! have_assoc; then
+			drops=$((drops + 1))
+			log "assoc lost ($drops/$DROP_LIMIT)"
+			shareframe-led wifi-connecting 2>/dev/null || true
+			[ "$drops" -ge "$DROP_LIMIT" ] && return
+			continue
+		fi
+		drops=0
+		if have_internet; then
+			wedge=0
+			wedge_limit=$WEDGE_BASE
+			shareframe-led normal 2>/dev/null || true
+			write_mode connected
+		else
+			wedge=$((wedge + 1))
+			shareframe-led wifi-down 2>/dev/null || true
+			write_mode connected   # internet=false
+			log "associated but no internet ($wedge/$wedge_limit)"
+			if [ "$wedge" -ge "$wedge_limit" ]; then
+				log "re-associating wifi (wedged link)"
+				/usr/libexec/s6/wifi-stack-restart monitor || true
+				wedge=0
+				wedge_limit=$((wedge_limit * 2))
+				[ "$wedge_limit" -gt "$WEDGE_MAX" ] && wedge_limit=$WEDGE_MAX
+			fi
+		fi
+	done
+}
+
+# Hold the AP; return when it's time to retry the station (dashboard request,
+# or the periodic retry while no client is mid-config).
+ap_wait_then_retry() {
+	rm -f "$RETRY_FLAG"
+	elapsed=0
+	while :; do
+		sleep "$AP_POLL"
+		elapsed=$((elapsed + AP_POLL))
+		if [ -f "$RETRY_FLAG" ]; then
+			rm -f "$RETRY_FLAG"
+			log "retry requested by dashboard"
+			return
+		fi
+		if [ "$elapsed" -ge "$AP_RETRY_EVERY" ]; then
+			elapsed=0
+			case "$(shareframe-ap status 2>/dev/null)" in
+				*stations=0) log "periodic station retry"; return ;;
+				*) log "client(s) connected; holding AP" ;;
+			esac
+		fi
+	done
+}
+
+# ---- state machine ----
+mkdir -p "$STATE_DIR"
+while :; do
+	enter_connecting
+	if wait_for_sta; then
+		enter_connected
+		monitor_connected
+	else
+		enter_ap
+		ap_wait_then_retry
+	fi
+done

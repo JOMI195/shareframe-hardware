@@ -1,5 +1,7 @@
 config BR2_PACKAGE_SYSINFO
 	bool "sysinfo"
 	help
-	  Zeigt Systeminformationen an (Hostname, Uptime, RAM,
-	  Page size, Kernel-Version).
+	  Fastfetch-style Shareframe-Board system banner: a full-width
+	  ASCII logo followed by host, kernel, uptime, CPU/temp/load,
+	  memory, disk and network rows. Reads all metrics from the
+	  shareframe-sysinfo overlay script; printed at login.

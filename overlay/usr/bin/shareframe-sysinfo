@@ -17,6 +17,10 @@ emit kernel "$(uname -sr 2>/dev/null)"
 # %z keeps this busybox-safe (GNU -Iseconds isn't always compiled in).
 emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 
+# --- OS identity (subshell so os-release vars don't leak into ours) ---
+# shellcheck disable=SC1091  # /etc/os-release is generated at build time
+[ -r /etc/os-release ] && ( . /etc/os-release; emit os_pretty_name "${PRETTY_NAME:-}" )
+
 # --- uptime (seconds) ---
 [ -r /proc/uptime ] && emit uptime_seconds "$(awk '{printf "%d", $1}' /proc/uptime)"
 

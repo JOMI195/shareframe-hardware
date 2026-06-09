@@ -1,0 +1,61 @@
+#!/bin/sh
+# shareframe-ap — bring the wlan0 AP fallback up/down. Drives the self-gated
+# hostapd + dnsmasq-ap services via the /run/shareframe/ap-enabled flag and
+# manages the wlan0 gateway IP. The station services (wpa_supplicant /
+# dhcpcd-wlan) MUST already be stopped by the caller (wifi-mode-manager):
+# brcmfmac cannot share wlan0 between AP and station.
+set -u
+IFACE=wlan0
+AP_IP=192.168.4.1/24
+SVC=/run/service
+FLAG=/run/shareframe/ap-enabled
+
+log() { echo "shareframe-ap: $*" > /dev/console; }
+
+ap_up() {
+	log "starting AP on ${IFACE}"
+	mkdir -p /run/shareframe
+	ip addr flush dev "$IFACE" 2>/dev/null || true
+	ip link set "$IFACE" up 2>/dev/null || true
+	# Release the gated services, then kick them so they don't wait the poll.
+	: > "$FLAG"
+	s6-svc -r "$SVC/hostapd" 2>/dev/null || true
+	# hostapd needs a moment to switch the radio into AP mode and bring the
+	# interface up before we can assign the gateway IP that dnsmasq binds to.
+	i=0
+	while [ "$i" -lt 10 ]; do
+		ip addr add "$AP_IP" dev "$IFACE" 2>/dev/null && break
+		sleep 1; i=$((i + 1))
+	done
+	s6-svc -r "$SVC/dnsmasq-ap" 2>/dev/null || true
+}
+
+ap_down() {
+	# Flag presence is the source of truth for "AP active". If it's absent the
+	# AP isn't running: do nothing and never touch wlan0 (this is called
+	# defensively on every switch back to station mode, including normal boot).
+	[ -e "$FLAG" ] || return 0
+	log "stopping AP on ${IFACE}"
+	rm -f "$FLAG"
+	# Restart the services so they drop back into their wait loop (flag gone).
+	s6-svc -r "$SVC/dnsmasq-ap" 2>/dev/null || true
+	s6-svc -r "$SVC/hostapd"    2>/dev/null || true
+	ip addr flush dev "$IFACE" 2>/dev/null || true
+	ip link set "$IFACE" down  2>/dev/null || true
+}
+
+ap_status() {
+	if [ -e "$FLAG" ]; then
+		stations="$(iw dev "$IFACE" station dump 2>/dev/null | grep -c '^Station')" || stations=0
+		echo "up stations=${stations}"
+	else
+		echo "down stations=0"
+	fi
+}
+
+case "${1:-}" in
+	up)     ap_up ;;
+	down)   ap_down ;;
+	status) ap_status ;;
+	*) echo "usage: shareframe-ap {up|down|status}" >&2; exit 1 ;;
+esac

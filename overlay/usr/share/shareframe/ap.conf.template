@@ -1,0 +1,9 @@
+# shareframe AP-fallback credentials (credless fallback template).
+#
+# Seeded to /data/wifi/ap.conf on first boot by seed-ap-config. That seeder
+# prefers a provisioned /usr/share/shareframe/ap.conf.default, then derives a
+# per-device SSID/password from the board serial, and only falls back to this
+# generic file when no serial is available. Edit /data/wifi/ap.conf and reboot
+# to customise the access point. Empty AP_PASS => open network.
+AP_SSID=shareframe-board
+AP_PASS=shareframe

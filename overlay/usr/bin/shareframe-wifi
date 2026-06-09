@@ -7,8 +7,16 @@ set -eu
 
 IFACE=wlan0
 WPA="wpa_cli -i ${IFACE}"
+CONF=/data/wifi/wpa_supplicant.conf
 
 die() { printf 'shareframe-wifi: %s\n' "$*" >&2; exit 1; }
+
+# True when a wpa_supplicant we can talk to is running. In AP fallback mode the
+# wifi-mode-manager stops wpa_supplicant (it can't share wlan0 with hostapd), so
+# `add` must fall back to editing the config file directly (see add_offline).
+wpa_running() {
+	${WPA} ping 2>/dev/null | grep -q PONG
+}
 
 wpa_ok() {
 	# wpa_cli prints "OK" / "FAIL"; treat anything but OK as failure.
@@ -48,7 +56,20 @@ EOF
 }
 
 cmd_list() {
-	${WPA} list_networks
+	if wpa_running; then
+		${WPA} list_networks
+		return
+	fi
+	# Offline (AP mode): synthesize wpa_cli's list_networks layout from the conf
+	# so the dashboard still shows saved networks. Header line is dropped by the
+	# caller; columns are id<TAB>ssid<TAB>bssid<TAB>flags.
+	printf 'network id / ssid / bssid / flags\n'
+	i=0
+	grep -o 'ssid="[^"]*"' "$CONF" 2>/dev/null | sed 's/^ssid="//; s/"$//' \
+		| while IFS= read -r s; do
+			printf '%d\t%s\tany\t\n' "$i" "$s"
+			i=$((i + 1))
+		done
 }
 
 cmd_scan() {
@@ -59,10 +80,41 @@ cmd_scan() {
 		| (read -r hdr; printf '%s\n' "$hdr"; sort -k3,3 -n -r)
 }
 
+# Add a network by appending a block straight to the config, used when
+# wpa_supplicant is down (AP fallback mode). wpa_supplicant reads the new block
+# when the manager brings it back up.
+add_offline() {
+	ssid="$1"; psk="$2"
+	[ -f "$CONF" ] || die "offline add: $CONF missing"
+
+	if [ -z "$psk" ]; then
+		{
+			printf '\nnetwork={\n'
+			printf '\tssid="%s"\n' "$ssid"
+			printf '\tkey_mgmt=NONE\n'
+			printf '}\n'
+		} >> "$CONF"
+	else
+		# wpa_passphrase emits a full network={} block; drop its plaintext
+		# `#psk="..."` comment line so the cleartext never lands in the conf.
+		block="$(wpa_passphrase "$ssid" "$psk" 2>/dev/null \
+			| grep -v '^[[:space:]]*#psk=')"
+		[ -n "$block" ] || die "wpa_passphrase failed for ssid=$ssid"
+		printf '\n%s\n' "$block" >> "$CONF"
+	fi
+	printf 'added network (offline) ssid=%s\n' "$ssid"
+}
+
 cmd_add() {
 	[ $# -ge 1 ] || die "add: need <ssid> [psk]"
 	ssid="$1"
 	psk="${2:-}"
+
+	# AP fallback: wpa_supplicant is stopped, so write the conf directly.
+	if ! wpa_running; then
+		add_offline "$ssid" "$psk"
+		return 0
+	fi
 
 	id="$(${WPA} add_network | tail -1)"
 	case "$id" in

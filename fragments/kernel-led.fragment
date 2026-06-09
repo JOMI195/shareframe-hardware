@@ -1,0 +1,4 @@
+# LED pattern trigger, used by shareframe-led for the distinct AP-mode blink
+# (triple-blink). shareframe-led falls back to the timer trigger if this is
+# absent, so it is a nice-to-have rather than a hard requirement.
+CONFIG_LEDS_TRIGGER_PATTERN=y

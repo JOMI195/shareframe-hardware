@@ -1,0 +1,19 @@
+#!/bin/sh
+# dnsmasq (DHCP + captive-portal DNS) for the wlan0 AP fallback. Supervised by
+# s6 but IDLE until wifi-mode-manager requests AP mode (/run/shareframe/ap-enabled)
+# AND the AP gateway IP is up on wlan0 — otherwise dnsmasq's bind-interfaces
+# bind would fail. Foreground for supervision; lease/pid on tmpfs (read-only
+# rootfs).
+set -u
+FLAG=/run/shareframe/ap-enabled
+
+mkdir -p /run/shareframe
+while [ ! -e "$FLAG" ]; do sleep 1; done
+# shareframe-ap assigns 192.168.4.1 to wlan0 right after starting hostapd; wait
+# for it so the bind succeeds on the first try.
+until ip -4 addr show wlan0 2>/dev/null | grep -q '192\.168\.4\.1'; do sleep 1; done
+
+exec dnsmasq -k \
+	--conf-file=/etc/dnsmasq.d/shareframe-ap.conf \
+	--dhcp-leasefile=/run/dnsmasq-ap.leases \
+	--pid-file=/run/dnsmasq-ap.pid

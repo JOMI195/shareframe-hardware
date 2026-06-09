@@ -8,6 +8,7 @@ fake-hwclock-restore
 fake-hwclock-save
 load-brcmfmac
 seed-wifi-config
+seed-ap-config
 setup-usb0
 udhcpd-usb0
 syslogd
@@ -18,7 +19,9 @@ dropbear
 ntpd
 wpa_supplicant
 dhcpcd-wlan
-wifi-reachability-watch
+hostapd
+dnsmasq-ap
+wifi-mode-manager
 wait-network-online
 getty-ttyS1
 nginx

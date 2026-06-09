@@ -1,2 +1,0 @@
-#!/bin/sh
-exec /usr/libexec/s6/wifi-reachability-watch

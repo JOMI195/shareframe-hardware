@@ -15,6 +15,14 @@ if [ -e /run/shutting-down ]; then
     exit 0
 fi
 
+# Don't fight wifi-mode-manager while it is deliberately switching wlan0 between
+# station and AP mode: it stops wpa_supplicant/dhcpcd on purpose, and re-upping
+# them here would defeat the AP fallback. The manager clears this flag once it
+# wants the station back.
+if [ -e /run/shareframe/wifi-switching ]; then
+    exit 0
+fi
+
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
         log "already running (triggered by ${SERVICE:-unknown})"
