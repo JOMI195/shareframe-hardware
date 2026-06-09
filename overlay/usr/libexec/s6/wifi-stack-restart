@@ -8,6 +8,13 @@ log() {
     echo "wifi-stack-restart: $*" > /dev/console
 }
 
+# Don't fight an intentional shutdown/reboot (see rc.shutdown). Re-upping the
+# wifi services here keeps s6-rc's down transition from settling, hanging the
+# whole shutdown so the board never reboots.
+if [ -e /run/shutting-down ]; then
+    exit 0
+fi
+
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
         log "already running (triggered by ${SERVICE:-unknown})"
@@ -37,7 +44,10 @@ if ip link show wlan0 >/dev/null 2>&1; then
     fi
 fi
 
-if ! s6-svc -r /run/service/wpa_supplicant /run/service/dhcpcd-wlan; then
-    log "failed to restart wifi services"
+# s6-svc takes a single service dir; restart each (wpa first — dhcpcd-wlan
+# waits on its ctrl socket).
+if ! s6-svc -r /run/service/wpa_supplicant; then
+    log "failed to restart wpa_supplicant"
     exit 1
 fi
+s6-svc -r /run/service/dhcpcd-wlan || log "failed to restart dhcpcd-wlan"

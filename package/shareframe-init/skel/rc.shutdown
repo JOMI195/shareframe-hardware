@@ -1,2 +1,6 @@
 #!/bin/sh
+# Tell self-healing helpers (wifi-stack-restart) to stand down so they don't
+# re-up wifi services while s6-rc brings the tree down — otherwise the down
+# transition never settles and the board never reaches the final reboot.
+touch /run/shutting-down
 s6-rc -bda change 2>/dev/null

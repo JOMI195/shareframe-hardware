@@ -1,6 +1,6 @@
 # Deploy-Configs (`configs/`)
 
-Ein Config-Ordner **pro Kunde/Gerät**. Bündelt alles, was sich zwischen
+Ein Config-Ordner **pro Gerät**. Bündelt alles, was sich zwischen
 Auslieferungen ändert, an **einem** Ort — getrennt vom getrackten `overlay/`, damit
 private Dateien nicht im Repo-Overlay liegen und nicht zwischen Builds hängen bleiben.
 

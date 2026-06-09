@@ -157,7 +157,7 @@ function buildroot() {
         make -C "$src_dir" "$(basename "$mk" .mk)-reconfigure"
     done
 
-    # Leak-Schutz beim Kundenwechsel: TARGET_DIR wird zwischen inkrementellen
+    # Leak-Schutz: TARGET_DIR wird zwischen inkrementellen
     # Builds nicht geleert und die .default-Seeds kommen per Overlay (kein Paket
     # -> kein dirclean). Bekannte sicherheitskritische Seed-Pfade entfernen; der
     # aktive Config-Overlay legt sie neu an, sonst faellt das Seed-Skript auf das
