@@ -1,0 +1,2 @@
+#!/bin/sh
+exec env SHAREFRAME_PROFILE="$(cat /etc/shareframe-profile 2>/dev/null || echo prod)" /usr/bin/shareframe-update

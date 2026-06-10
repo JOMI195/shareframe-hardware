@@ -86,11 +86,11 @@ function buildroot() {
     local config="buildroot-rpi0w"
     local config_dir="${1:-}"
 
-    # SHAREFRAME_MODE: dev | prod (default). Picked up by:
-    #   - post-image.sh -> sets dev_netboot=0|1 in compiled uboot.env
-    #   - post-build.sh -> writes /etc/shareframe-mode (consumed by Phase 6 longrun)
-    export SHAREFRAME_MODE="${SHAREFRAME_MODE:-prod}"
-    echo "=== SHAREFRAME_MODE=${SHAREFRAME_MODE} ==="
+    # SHAREFRAME_BUILD_MODE: dev | prod (default). Picked up by:
+    #   - post-image.sh -> dev adds uart_2ndstage=1 (verbose firmware UART log)
+    #   - post-build.sh -> writes /etc/shareframe-build-mode
+    export SHAREFRAME_BUILD_MODE="${SHAREFRAME_BUILD_MODE:-prod}"
+    echo "=== SHAREFRAME_BUILD_MODE=${SHAREFRAME_BUILD_MODE} ==="
 
     # SHAREFRAME_PROFILE: dev | prod (default) | prod.local. Picked up by:
     #   - post-build.sh -> writes /etc/shareframe-profile (read by the 60-app
@@ -172,20 +172,14 @@ function buildroot() {
     rm -rf artifacts/deploy artifacts/sdcard
     mkdir -p artifacts/deploy artifacts/sdcard
 
-    # --- artifacts/deploy/ : pro Kernel-Iteration ausgeliefert.
-    # Im dev-mode laedt U-Boot diese via TFTP und schreibt rootfs.squashfs
-    # in Slot A sowie zImage/dtb in /boot/A/ und initramfs/boot.scr/uboot.env
-    # an FAT-Root. So sind boot.cmd / uboot-env Aenderungen ohne SD-Reflash
-    # nach einem dev-mode reboot wirksam.
+    # --- artifacts/deploy/ : Einzelartefakte (QEMU, Debugging) + Release-Bundle.
     cp "$img/zImage"                  artifacts/deploy/
     cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/deploy/
     [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" artifacts/deploy/
     cp "$img/rootfs.squashfs"         artifacts/deploy/
     cp "$img/initramfs.cpio.gz"       artifacts/deploy/
-    [ -f "$img/boot.scr" ]      && cp "$img/boot.scr"      artifacts/deploy/
-    [ -f "$img/uboot.env" ]     && cp "$img/uboot.env"     artifacts/deploy/
 
-    # --- artifacts/sdcard/ : komplettes SD-Image (boot FAT + A/B + /data ext4)
+    # --- artifacts/sdcard/ : komplettes SD-Image (fw + boot A/B + rootfs A/B + /data)
     # via genimage (BR2_ROOTFS_POST_IMAGE_SCRIPT = board/raspberrypi0w/post-image.sh).
     # Einmaliges `dd if=sdcard.img of=/dev/sdX` legt alle Partitionen an.
     if [ -f "$img/sdcard.img" ]; then
@@ -195,11 +189,11 @@ function buildroot() {
     fi
 
     # --- artifacts/deploy/ : RAUC update bundle (signed). Dev keys via
-    # scripts/gen-dev-keys.sh (run once). Bundle is what the future C++
-    # download service fetches + passes to `rauc install`.
+    # scripts/gen-dev-keys.sh (run once). Bundle is what the C++ app fetches
+    # from the server and passes to `rauc install`.
     if [ -f package/shareframe-rauc/files/cert.pem ] && [ -f package/shareframe-rauc/files/key.pem ]; then
-        if ! ./scripts/make-bundle.sh; then
-            echo "WARN: make-bundle.sh failed"
+        if ! ./scripts/make-release.sh --mode dev; then
+            echo "WARN: make-release.sh failed"
         fi
     else
         echo "INFO: dev keys missing — skipping RAUC bundle build. Run scripts/gen-dev-keys.sh first."
@@ -229,7 +223,7 @@ function qemu_rpi0() {
         -serial null -serial mon:stdio \
         -kernel artifacts/deploy/zImage \
         -dtb artifacts/deploy/bcm2835-rpi-zero-w.dtb \
-        -initrd artifacts/deploy/rootfs.cpio.gz \
+        -initrd artifacts/deploy/initramfs.cpio.gz \
         -append "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/ram0 rw initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init"
 }
 
@@ -308,7 +302,7 @@ function build() {
       [ -d "$config_dir" ] || { echo "build: config dir '$config_dir' not found" >&2; return 1; }
       [ -f "$config_dir/config.env" ] || { echo "build: '$config_dir/config.env' not found" >&2; return 1; }
       echo "=== Config: $config_dir ==="
-      # config.env setzt SHAREFRAME_MODE/PROFILE, optionale *_OVERRIDE_SRCDIR und
+      # config.env setzt SHAREFRAME_BUILD_MODE/PROFILE, optionale *_OVERRIDE_SRCDIR und
       # SHAREFRAME_CONFIG_LABEL. set -a exportiert sie, sodass buildroot() und die
       # Buildroot-Skripte (post-build.sh) sie aus der Umgebung lesen.
       # shellcheck disable=SC1090,SC1091
@@ -325,20 +319,18 @@ function build() {
 }
 
 function deploy() {
-    echo "=== Sende Dev-Netboot-Artefakte zum Pi 4B (TFTP) ==="
+    # Dev-Loop: neuestes Bundle per usb0-SSH aufs Board, rauc install,
+    # tryboot-Reboot in den neuen Slot. Identischer Pfad wie Prod-Updates.
+    echo "=== Installiere Update-Bundle auf dem Board (usb0/SSH) ==="
 
-    local deploy_src_dir="artifacts/deploy"
+    local board="${BOARD:-root@10.55.0.2}"
+    local bundle
+    bundle="$(ls -t artifacts/deploy/shareframe-*.raucb 2>/dev/null | head -1)"
+    [ -n "$bundle" ] || { echo "deploy: kein Bundle in artifacts/deploy/ — erst bauen" >&2; return 1; }
 
-    ssh "$PI4B" "mkdir -p /srv/tftp/pizero"
-    scp \
-        "$deploy_src_dir/zImage" \
-        "$deploy_src_dir/bcm2835-rpi-zero-w.dtb" \
-        "$deploy_src_dir/spi0-spidev.dtbo" \
-        "$deploy_src_dir/rootfs.squashfs" \
-        "$deploy_src_dir/initramfs.cpio.gz" \
-        "$PI4B:/srv/tftp/pizero/"
-
-    true
+    ssh "$board" "mkdir -p /data/cache"
+    scp "$bundle" "$board:/data/cache/$(basename "$bundle")"
+    ssh "$board" "rauc install /data/cache/$(basename "$bundle") && touch /run/tryboot && reboot"
 }
 
 function restart() {

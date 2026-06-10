@@ -17,6 +17,23 @@ echo "=== Post-build: Build-Stempel erzeugen ==="
 
 echo "=== Post-build: /etc/build-info geschrieben ==="
 
+# /etc/shareframe-release: single version source for the app, the RAUC bundle
+# manifest and the server compare. SHAREFRAME_VERSION env wins (make-release),
+# else the app's VERSION.toml, else the git sha.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VERSION="${SHAREFRAME_VERSION:-}"
+if [ -z "$VERSION" ]; then
+    VERSION_TOML="${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-$SCRIPT_DIR/../../shareframe-board}/VERSION.toml"
+    [ -f "$VERSION_TOML" ] && VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$VERSION_TOML")"
+fi
+[ -n "$VERSION" ] || VERSION="${BUILD_SHA:-unknown}"
+{
+    echo "VERSION=${VERSION}"
+    echo "BUILD_SHA=${BUILD_SHA:-unknown}"
+    echo "BUILD_DATE=$(date --iso-8601=seconds)"
+} > "$TARGET_DIR/etc/shareframe-release"
+echo "=== Post-build: /etc/shareframe-release VERSION=${VERSION} ==="
+
 if [ -n "$BUILD_SHA" ]; then
     {
         echo "BUILD_ID=$BUILD_SHA"
@@ -29,11 +46,11 @@ fi
 date +%s > "$TARGET_DIR/etc/fake-hwclock-default"
 echo "=== Post-build: /etc/fake-hwclock-default mit Build-Epoch geschrieben ==="
 
-# SHAREFRAME_MODE: dev | prod. Consumed by mode-aware longruns (Phase 6
-# udhcpd-usb0 only runs in prod). Pure runtime signal; does not alter boot path.
-MODE="${SHAREFRAME_MODE:-prod}"
-echo "${MODE}" > "$TARGET_DIR/etc/shareframe-mode"
-echo "=== Post-build: /etc/shareframe-mode=${MODE} ==="
+# SHAREFRAME_BUILD_MODE: dev | prod image flavor. Currently only post-image.sh
+# acts on it (uart_2ndstage=1 in dev); the file is informational for now.
+MODE="${SHAREFRAME_BUILD_MODE:-prod}"
+echo "${MODE}" > "$TARGET_DIR/etc/shareframe-build-mode"
+echo "=== Post-build: /etc/shareframe-build-mode=${MODE} ==="
 
 # SHAREFRAME_PROFILE: dev | prod | prod.local. The 60-app s6 run scripts read
 # this file and export it as SHAREFRAME_PROFILE, selecting the
@@ -42,10 +59,8 @@ PROFILE="${SHAREFRAME_PROFILE:-prod}"
 echo "${PROFILE}" > "$TARGET_DIR/etc/shareframe-profile"
 echo "=== Post-build: /etc/shareframe-profile=${PROFILE} ==="
 
-# Compile the SPI DT overlay into /boot so it ships inside the squashfs slot.
-# RAUC post-install.sh then syncs it to FAT /boot/<slot>/ on every update,
-# exactly like zImage + bcm2835-rpi-zero-w.dtb -> per-slot, rollback-safe.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Compile the SPI DT overlay. Ships in each FAT boot slot (overlays/), applied
+# by the firmware via dtoverlay=spi0-spidev in the per-slot config.txt.
 OVERLAY_SRC="${SCRIPT_DIR}/../board/raspberrypi0w/overlays/spi0-spidev.dts"
 DTC="${HOST_DIR}/bin/dtc"
 if [ -x "${DTC}" ] && [ -f "${OVERLAY_SRC}" ]; then

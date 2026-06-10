@@ -1,0 +1,16 @@
+System migrations — contract
+
+- Files: NNN-name.sh, run in lexical order by /usr/libexec/s6/system-migrations
+  at boot whenever the image version changed (before the app starts, before
+  the update is committed).
+- Idempotent: a script may run again on the next update or after a re-run;
+  it must detect already-done work and exit 0.
+- Backward compatible: they run BEFORE the A/B commit. If the update rolls
+  back, the OLD app sees the migrated /data — only make additive changes
+  (new dirs/keys/files), never remove or rewrite what the previous release
+  reads.
+- Failure: non-zero exit logs the failure and flags
+  /run/shareframe/migrations-failed; boot continues, the state file is not
+  advanced (all scripts re-run next boot).
+- Scope: /data only. The rootfs is read-only; app DB schema migrations live
+  in the app (shareframe-db-migrate, /usr/share/shareframe/migrations/*.sql), not here.

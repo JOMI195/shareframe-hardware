@@ -1,17 +1,41 @@
 #!/bin/sh
-# Late-boot health gate: when wifi has an IP (or 60s timeout), declare current
-# slot good. Resets BOOT_${slot}_LEFT=3 in uboot.env via RAUC.
-# Background so this oneshot can complete and not block boot.
-# TODO: healthy when shareframe application and dashboard did something which still needs to be implemented
-(
-	tries=12   # 12 * 5s = 60s max
-	while [ "${tries}" -gt 0 ]; do
-		ip -4 -o addr show wlan0 2>/dev/null | grep -q inet && break
-		tries=$((tries - 1))
-		sleep 5
-	done
+# Commit gate for a staged A/B update. Only acts when this boot IS the tryboot
+# attempt (booted == pending): waits for the app stack + health daemon to look
+# sane, then `rauc status mark-good` — the tryboot backend rewrites
+# autoboot.txt (commit). If the gate never passes, nothing is committed and
+# the next reset falls back to the old slot. Background so boot isn't blocked.
+set -u
+PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
+HEALTH_JSON="${HEALTH_JSON:-/run/shareframe/health.json}"
+SCANDIR="${SCANDIR:-/run/service}"
+DEADLINE="${DEADLINE:-180}"   # seconds
 
-	if [ -x /usr/bin/rauc ]; then
-		/usr/bin/rauc status mark-good >/dev/null 2>&1 || true
-	fi
+pending=$(cat "$PENDING_FILE" 2>/dev/null || true)
+[ -n "$pending" ] || exit 0
+booted=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline)
+[ "$pending" = "$booted" ] || exit 0   # rauc-reconcile handles the mismatch
+
+(
+	waited=0
+	while [ "$waited" -lt "$DEADLINE" ]; do
+		ok=1
+		# health daemon up and not critical
+		grep -q '"overall":"\(ok\|warn\)"' "$HEALTH_JSON" 2>/dev/null || ok=0
+		# core app services supervised and up
+		for svc in shareframe-display shareframe-dashboard shareframe-update; do
+			s6-svstat -o up "$SCANDIR/$svc" 2>/dev/null | grep -q true || ok=0
+		done
+		if [ "$ok" = 1 ]; then
+			if rauc status mark-good >/dev/null 2>&1; then
+				echo "rauc-mark-good: slot $booted committed"
+				shareframe-update-history committed
+			else
+				echo "rauc-mark-good: rauc mark-good failed; staying uncommitted"
+			fi
+			exit 0
+		fi
+		sleep 5
+		waited=$((waited + 5))
+	done
+	echo "rauc-mark-good: health gate not reached in ${DEADLINE}s; NOT committing (next reset rolls back)"
 ) &

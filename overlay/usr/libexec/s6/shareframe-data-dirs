@@ -6,5 +6,5 @@
 # (ed25519_private_key) is filled in by provisioning before the device talks to the
 # backend; the file itself is present from first boot.
 set -e
-mkdir -p /data/shareframe/db /data/shareframe/images /data/shareframe/logs
+mkdir -p /data/shareframe/db /data/shareframe/images
 chmod 0750 /data/shareframe

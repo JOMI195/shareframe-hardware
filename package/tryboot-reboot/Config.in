@@ -1,0 +1,6 @@
+config BR2_PACKAGE_TRYBOOT_REBOOT
+	bool "tryboot-reboot"
+	help
+	  Tiny static tool issuing reboot(RESTART2, "0 tryboot") so the Pi
+	  firmware boots the staged A/B slot exactly once. Invoked by the
+	  s6-linux-init rc.shutdown.final hook when /run/tryboot exists.

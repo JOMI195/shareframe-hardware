@@ -1,8 +1,8 @@
 #!/bin/sh
-# Mount /dev/mmcblk0p4 at /data (f2fs, pre-formatted by genimage). Repair before
-# mount; reformat ONLY when there is no valid f2fs there (corrupt beyond repair).
-# Never wipe a repairable filesystem — that is how power-loss glitches became
-# total data loss.
+# Mount /dev/mmcblk0p4 at /data (f2fs, pre-formatted by genimage, grown by
+# expand-data). Repair before mount; reformat ONLY when there is no valid f2fs
+# there (corrupt beyond repair). Never wipe a repairable filesystem — that is
+# how power-loss glitches became total data loss.
 set -e
 DEV=/dev/mmcblk0p4
 MNT=/data

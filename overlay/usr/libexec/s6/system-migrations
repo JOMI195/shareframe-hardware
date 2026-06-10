@@ -1,0 +1,30 @@
+#!/bin/sh
+# Run system migrations (idempotent scripts on /data) when the booted image
+# version differs from the last completed run.
+set -u
+MIG_DIR="${MIG_DIR:-/usr/share/shareframe/system-migrations}"
+STATE="${STATE:-/data/shareframe/migrations.state}"
+RELEASE="${RELEASE:-/etc/shareframe-release}"
+
+ver=$(sed -n 's/^VERSION=//p' "$RELEASE" 2>/dev/null)
+[ -n "$ver" ] || ver=unknown
+last=$(cat "$STATE" 2>/dev/null || true)
+[ "$ver" = "$last" ] && exit 0
+
+mkdir -p /run/shareframe
+rm -f /run/shareframe/migrations-failed
+fail=0
+for m in "$MIG_DIR"/*.sh; do
+	[ -f "$m" ] || continue
+	echo "system-migrations: running $(basename "$m")"
+	if ! sh "$m"; then
+		echo "system-migrations: $(basename "$m") FAILED (continuing)"
+		fail=1
+	fi
+done
+if [ "$fail" = 0 ]; then
+	echo "$ver" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+else
+	: > /run/shareframe/migrations-failed
+fi
+exit 0

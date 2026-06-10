@@ -1,2 +1,2 @@
-mount-boot
-mount-data
+rauc-reconcile
+shareframe-data-dirs

@@ -1,7 +1,0 @@
-#!/bin/sh
-# Mount /dev/mmcblk0p1 at /boot so fw_setenv and the RAUC post-install hook
-# can read/write uboot.env and update per-slot kernel/dtb.
-set -e
-mkdir -p /boot
-mountpoint -q /boot && exit 0
-mount -t vfat -o rw,noatime /dev/mmcblk0p1 /boot

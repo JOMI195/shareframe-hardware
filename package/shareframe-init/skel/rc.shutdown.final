@@ -1,0 +1,6 @@
+#!/bin/sh
+# Staged A/B update: swap the normal reboot for a tryboot reboot so the
+# firmware boots the pending slot exactly once. /run is still mounted here.
+if [ -f /run/tryboot ]; then
+	/usr/sbin/tryboot-reboot || true
+fi

@@ -1,88 +1,77 @@
 #!/bin/bash
-# BR2_ROOTFS_POST_IMAGE_SCRIPT: assemble sdcard.img with
-#   - boot FAT (firmware, u-boot, boot.scr, uboot.env + redundant copy,
-#     initramfs.cpio.gz, /boot/A/{zImage,dtb}, /boot/B/{zImage,dtb})
-#   - rootfs slots A + B (both initially the same squashfs)
-#   - /data ext4
-#
-# Buildroot invokes this after rootfs build with BINARIES_DIR + BUILD_DIR set.
-
+# BR2_ROOTFS_POST_IMAGE_SCRIPT: build the single boot FAT (firmware +
+# config.txt/tryboot.txt + per-slot A/ B/ kernel sets) and assemble
+# sdcard.img. SHAREFRAME_BUILD_MODE=dev adds verbose firmware UART log.
 set -euo pipefail
 
 BOARD_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "${BOARD_DIR}/../.." && pwd)"
-GENIMAGE_CFG_IN="${BOARD_DIR}/genimage.cfg.in"
-GENIMAGE_CFG="${BINARIES_DIR}/genimage.cfg"
+GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
+MODE="${SHAREFRAME_BUILD_MODE:-prod}"
 
-HOST_BIN="${PROJECT_ROOT}/buildroot/src/output/host/bin"
+MKFS_VFAT="${HOST_DIR}/sbin/mkfs.vfat"
+[ -x "${MKFS_VFAT}" ] || MKFS_VFAT="$(command -v mkfs.vfat)"
+MCOPY="${HOST_DIR}/bin/mcopy"
+[ -x "${MCOPY}" ] || MCOPY="$(command -v mcopy)"
 
-# 1. Compile boot.cmd -> boot.scr (U-Boot script) using the in-tree mkimage.
-MKIMAGE="$(ls "${BUILD_DIR}"/uboot-*/tools/mkimage 2>/dev/null | head -1 || true)"
-BOOT_CMD="${BOARD_DIR}/boot.cmd"
-if [ -n "${MKIMAGE}" ] && [ -f "${BOOT_CMD}" ]; then
-	"${MKIMAGE}" -A arm -O linux -T script -C none \
-		-d "${BOOT_CMD}" "${BINARIES_DIR}/boot.scr"
-else
-	echo "post-image: WARN mkimage or boot.cmd missing; boot.scr not generated" >&2
-fi
-
-# 2. Compile uboot.env.txt -> uboot.env (+ redundant copy).
-# SHAREFRAME_MODE=dev flips dev_netboot=1 (U-Boot TFTPs new artifacts into
-# slot A then boots); =prod (default) keeps dev_netboot=0.
-MKENVIMAGE="${HOST_BIN}/mkenvimage"
-ENV_TXT="${BOARD_DIR}/uboot.env.txt"
-MODE="${SHAREFRAME_MODE:-prod}"
-case "${MODE}" in dev) DEV_NETBOOT=1 ;; *) DEV_NETBOOT=0 ;; esac
-if [ -x "${MKENVIMAGE}" ] && [ -f "${ENV_TXT}" ]; then
-	ENV_COMPILED="${BINARIES_DIR}/uboot.env.txt"
-	sed "s/^dev_netboot=.*/dev_netboot=${DEV_NETBOOT}/" "${ENV_TXT}" > "${ENV_COMPILED}"
-	# Non-redundant env: upstream U-Boot does not support
-	# CONFIG_SYS_REDUNDAND_ENVIRONMENT with CONFIG_ENV_IS_IN_FAT, so don't
-	# pass -r (the 5-byte header would CRC-fail when U-Boot reads it as
-	# the 4-byte non-redundant layout).
-	"${MKENVIMAGE}" -s 0x4000 -o "${BINARIES_DIR}/uboot.env"        "${ENV_COMPILED}"
-	# mkenvimage drops 0640; tftpd (unprivileged) needs 0644 to serve.
-	chmod 0644 "${BINARIES_DIR}/uboot.env"
-	# uboot-redund.env retained as an empty stub on FAT only because the
-	# previous layout wrote one; harmless and unread by current U-Boot.
-	rm -f "${BINARIES_DIR}/uboot-redund.env"
-	echo "post-image: uboot.env compiled with dev_netboot=${DEV_NETBOOT} (mode=${MODE})"
-else
-	echo "post-image: WARN mkenvimage or uboot.env.txt missing; uboot.env not generated" >&2
-fi
-
-# 3. Stage per-slot kernel + dtb under boot/A/ and boot/B/. Initial image
-# flashes both slots with the same payload.
-mkdir -p "${BINARIES_DIR}/boot/A" "${BINARIES_DIR}/boot/B"
-for slot in A B; do
-	[ -f "${BINARIES_DIR}/zImage" ]                  && cp "${BINARIES_DIR}/zImage"                  "${BINARIES_DIR}/boot/${slot}/zImage"
-	[ -f "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb" ]  && cp "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb"  "${BINARIES_DIR}/boot/${slot}/bcm2835-rpi-zero-w.dtb"
-	[ -f "${BINARIES_DIR}/spi0-spidev.dtbo" ]        && cp "${BINARIES_DIR}/spi0-spidev.dtbo"        "${BINARIES_DIR}/boot/${slot}/spi0-spidev.dtbo"
+FW_DIR="${BINARIES_DIR}/rpi-firmware"
+for f in bootcode.bin start.elf fixup.dat; do
+	[ -f "${FW_DIR}/${f}" ] || { echo "post-image: ${FW_DIR}/${f} missing" >&2; exit 1; }
+done
+for f in zImage bcm2835-rpi-zero-w.dtb spi0-spidev.dtbo initramfs.cpio.gz; do
+	[ -f "${BINARIES_DIR}/${f}" ] || { echo "post-image: ${BINARIES_DIR}/${f} missing" >&2; exit 1; }
 done
 
-# 4. Build the FAT contents list.
-FILES=()
-for f in bootcode.bin fixup.dat start.elf config.txt; do
-	[ -f "${BINARIES_DIR}/rpi-firmware/${f}" ] && FILES+=( "rpi-firmware/${f}" )
-done
-[ -f "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb" ] && FILES+=( "bcm2835-rpi-zero-w.dtb" )
-[ -f "${BINARIES_DIR}/u-boot.bin" ]             && FILES+=( "u-boot.bin" )
-[ -f "${BINARIES_DIR}/boot.scr" ]               && FILES+=( "boot.scr" )
-[ -f "${BINARIES_DIR}/uboot.env" ]              && FILES+=( "uboot.env" )
-[ -f "${BINARIES_DIR}/uboot-redund.env" ]       && FILES+=( "uboot-redund.env" )
-[ -f "${BINARIES_DIR}/initramfs.cpio.gz" ]      && FILES+=( "initramfs.cpio.gz" )
-# Whole boot/ directory: mcopy -sp on a directory preserves the structure
-# (boot/A/zImage etc.). Listing individual files instead flattens to root.
-[ -d "${BINARIES_DIR}/boot" ]                   && FILES+=( "boot" )
+# render the config template: $1 = os_prefix value, output to stdout
+render_config() {
+	sed "s|@OS_PREFIX@|$1|" "${BOARD_DIR}/config.txt"
+	[ "${MODE}" = dev ] && echo "uart_2ndstage=1" || true
+}
 
-BOOT_FILES=$(printf '\t\t\t"%s",\n' "${FILES[@]}")
-awk -v repl="${BOOT_FILES}" '{gsub(/#BOOT_FILES#/, repl); print}' \
-	"${GENIMAGE_CFG_IN}" > "${GENIMAGE_CFG}"
+# per-slot kernel set under <tree>/<slot>/
+stage_slot_dir() { # <slot A|B> <dir>
+	local slot="$1" dir="$2"
+	mkdir -p "${dir}/overlays"
+	# firmware only honors per-prefix overlays if ${os_prefix}overlays/README exists
+	echo "per-slot overlays (os_prefix marker)" > "${dir}/overlays/README"
+	sed "s/@SLOT@/${slot}/" "${BOARD_DIR}/cmdline.txt" > "${dir}/cmdline.txt"
+	cp "${BINARIES_DIR}/zImage"                 "${dir}/zImage"
+	cp "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb" "${dir}/bcm2835-rpi-zero-w.dtb"
+	cp "${BINARIES_DIR}/spi0-spidev.dtbo"       "${dir}/overlays/spi0-spidev.dtbo"
+	cp "${BINARIES_DIR}/initramfs.cpio.gz"      "${dir}/initramfs.cpio.gz"
+}
 
-# 5. Run genimage.
-trap 'rm -rf "${ROOTPATH_TMP}"' EXIT
+TREE="${BINARIES_DIR}/boot-tree"
+rm -rf "${TREE}"
+mkdir -p "${TREE}"
+cp "${FW_DIR}/bootcode.bin" "${FW_DIR}/start.elf" "${FW_DIR}/fixup.dat" "${TREE}/"
+render_config "A/" > "${TREE}/config.txt"
+render_config "B/" > "${TREE}/tryboot.txt"
+stage_slot_dir A "${TREE}/A"
+stage_slot_dir B "${TREE}/B"
+
+# slot-neutral subtree for make-release boot.tar (cmdline keeps @SLOT@;
+# the bundle's slot-install hook substitutes it for the target slot)
+SLOT_TREE="${BINARIES_DIR}/bootslot-tree"
+rm -rf "${SLOT_TREE}"
+mkdir -p "${SLOT_TREE}"
+cp "${BOARD_DIR}/cmdline.txt" "${SLOT_TREE}/cmdline.txt"
+cp "${BINARIES_DIR}/zImage"                 "${SLOT_TREE}/zImage"
+cp "${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb" "${SLOT_TREE}/bcm2835-rpi-zero-w.dtb"
+mkdir -p "${SLOT_TREE}/overlays"
+echo "per-slot overlays (os_prefix marker)" > "${SLOT_TREE}/overlays/README"
+cp "${BINARIES_DIR}/spi0-spidev.dtbo"       "${SLOT_TREE}/overlays/spi0-spidev.dtbo"
+cp "${BINARIES_DIR}/initramfs.cpio.gz"      "${SLOT_TREE}/initramfs.cpio.gz"
+
+# mkfs defaults (FAT16 at 64MiB) — the exact filesystem the bootcode->start.elf
+# chain was proven with on this hardware; FAT32 -s 1 hung bootcode.
+rm -f "${BINARIES_DIR}/boot.vfat"
+"${MKFS_VFAT}" -C -n BOOT "${BINARIES_DIR}/boot.vfat" 65536 >/dev/null
+"${MCOPY}" -i "${BINARIES_DIR}/boot.vfat" -spQ "${TREE}"/* ::/
+echo "post-image: boot.vfat built (mode=${MODE})"
+
 ROOTPATH_TMP="$(mktemp -d)"
+trap 'rm -rf "${ROOTPATH_TMP}"' EXIT
 rm -rf "${GENIMAGE_TMP}"
 
 genimage \

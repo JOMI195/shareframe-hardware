@@ -1,0 +1,29 @@
+#!/bin/sh
+# Append an update-history record (JSONL on /data, capped) and consume the
+# staged meta written by the installer before reboot.
+# usage: shareframe-update-history <committed|rolled-back|install-failed> [error]
+set -u
+RESULT="${1:?result required}"
+ERROR="${2:-}"
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+META="${META:-/data/rauc/pending-meta.json}"
+HIST="$DATA_DIR/update-history.jsonl"
+MAX=50
+
+json_get() { sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$META" 2>/dev/null | head -1; }
+esc() { printf '%s' "$1" | tr -d '\n\r' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+from=$(json_get from_version)
+to=$(json_get to_version)
+[ -n "$from" ] || from=$(sed -n 's/^VERSION=//p' /etc/shareframe-release 2>/dev/null)
+
+mkdir -p "$DATA_DIR"
+printf '{"timestamp":"%s","from_version":"%s","to_version":"%s","result":"%s","error":"%s"}\n' \
+	"$(date '+%Y-%m-%dT%H:%M:%S')" "$(esc "${from:-}")" "$(esc "${to:-}")" \
+	"$(esc "$RESULT")" "$(esc "$ERROR")" >> "$HIST"
+
+lines=$(wc -l < "$HIST" 2>/dev/null || echo 0)
+if [ "$lines" -gt "$MAX" ]; then
+	tail -n "$MAX" "$HIST" > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
+fi
+rm -f "$META"

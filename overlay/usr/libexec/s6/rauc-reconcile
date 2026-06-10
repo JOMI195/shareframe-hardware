@@ -1,0 +1,20 @@
+#!/bin/sh
+# Boot-time reconcile of a staged A/B update. A pending slot that is NOT the
+# booted slot means the tryboot attempt failed (kernel never came up, watchdog
+# fired, or power was cut before the reboot): mark it bad — never auto-retry —
+# and record the rollback for the dashboard.
+set -u
+PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
+
+pending=$(cat "$PENDING_FILE" 2>/dev/null || true)
+[ -n "$pending" ] || exit 0
+
+booted=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline)
+[ "$pending" = "$booted" ] && exit 0   # tryboot attempt running; mark-good decides
+
+echo "rauc-reconcile: staged slot $pending never came up (booted $booted); rolling back"
+rauc status mark-bad other 2>/dev/null || {
+	# rauc unavailable this early would leave pending stuck; clear via backend
+	/usr/lib/rauc/tryboot-backend set-state "$pending" bad
+}
+shareframe-update-history rolled-back "staged slot $pending failed to boot"

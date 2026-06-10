@@ -27,8 +27,9 @@ define SHAREFRAME_INIT_INSTALL_TARGET_CMDS
 		$(TARGET_DIR)/etc/s6-linux-init/current
 
 	# 2) Stage-2 Scripts ueberschreiben
-	$(INSTALL) -m 0755 $(@D)/skel/rc.init     $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.init
-	$(INSTALL) -m 0755 $(@D)/skel/rc.shutdown $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.shutdown
+	$(INSTALL) -m 0755 $(@D)/skel/rc.init           $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.init
+	$(INSTALL) -m 0755 $(@D)/skel/rc.shutdown       $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.shutdown
+	$(INSTALL) -m 0755 $(@D)/skel/rc.shutdown.final $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.shutdown.final
 
 	# 3) /init + /sbin/init -> s6
 	ln -sf /etc/s6-linux-init/current/bin/init $(TARGET_DIR)/sbin/init

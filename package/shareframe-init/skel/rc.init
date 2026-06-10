@@ -6,8 +6,13 @@
 mkdir -p /dev/pts /dev/shm /tmp
 mount -t devpts devpts /dev/pts
 mount -t tmpfs  tmpfs  /tmp
+# RO squashfs root: anything writing /var (dhcpcd, nginx, future pkgs) gets a
+# fresh capped tmpfs each boot.
+mount -t tmpfs -o mode=0755,size=32m tmpfs /var
+mkdir -p /var/db/dhcpcd /var/lib/misc /var/log/nginx /var/spool /var/empty /var/tmp
+chmod 1777 /var/tmp
 
-mkdir -p /run/lock /var/log /var/empty /var/spool /etc/cron/crontabs
+mkdir -p /run/lock /run/log/shareframe /etc/cron/crontabs
 ln -sf /run      /var/run
 ln -sf /run/lock /var/lock
 

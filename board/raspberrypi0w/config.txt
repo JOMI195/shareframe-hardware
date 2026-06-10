@@ -1,4 +1,7 @@
 enable_uart=1
-dtoverlay=disable-bt
-dtoverlay=dwc2,dr_mode=peripheral
-kernel=u-boot.bin
+gpu_mem=32
+os_prefix=@OS_PREFIX@
+device_tree=bcm2835-rpi-zero-w.dtb
+kernel=zImage
+initramfs initramfs.cpio.gz followkernel
+dtoverlay=spi0-spidev

@@ -1,0 +1,11 @@
+Per-release update scripts, shipped inside the signed bundle by make-release.sh.
+
+releases/<version>/pre.sh   - install-check hook: runs in the OLD system before
+                              any slot is written; non-zero exit aborts install.
+releases/<version>/post.sh  - boot-slot post-install hook: runs in the OLD
+                              system after slots are written, before reboot.
+                              $RAUC_SLOT_MOUNT_POINT = new boot slot (mounted).
+releases/<version>/notes.md - release notes for release.json.
+
+Run-once-with-this-update only. For run-every-update idempotent work use
+overlay/usr/share/shareframe/system-migrations/ (executes in the NEW system).

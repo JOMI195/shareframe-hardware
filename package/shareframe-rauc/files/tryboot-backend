@@ -1,0 +1,98 @@
+#!/bin/sh
+# RAUC custom bootloader backend for the Pi firmware tryboot A/B scheme.
+# Called by rauc as: get-primary | get-state <A|B> | set-primary <A|B> |
+# set-state <A|B> <good|bad>.
+#
+# A/B lives in ONE boot FAT (p1): config.txt has os_prefix=<committed>/,
+# tryboot.txt has os_prefix=<other>/. start.elf loads tryboot.txt instead of
+# config.txt when the one-shot tryboot flag is set. Commit = swap the two
+# os_prefix lines. Pending/staged slot + per-slot states live on /data.
+set -eu
+
+FW_DEV="${FW_DEV:-/dev/mmcblk0p1}"
+FW_MNT="${FW_MNT:-/run/shareframe/fw}"
+STATE_DIR="${STATE_DIR:-/data/rauc}"
+CMDLINE="${CMDLINE:-/proc/cmdline}"
+PENDING="$STATE_DIR/pending"
+TRYBOOT_FLAG="${TRYBOOT_FLAG:-/run/tryboot}"
+
+prefix_slot() { # "A/" -> A
+	case "$1" in
+		A/) echo A ;;
+		B/) echo B ;;
+		*) echo "tryboot-backend: unknown os_prefix '$1'" >&2; exit 1 ;;
+	esac
+}
+other_slot() { [ "$1" = A ] && echo B || echo A; }
+
+# NO_MOUNT=1: host tests point FW_MNT at a fixture dir, no real vfat mount.
+mount_fw() {
+	[ "${NO_MOUNT:-0}" = 1 ] && return 0
+	mkdir -p "$FW_MNT"
+	mountpoint -q "$FW_MNT" || mount -t vfat -o "$1" "$FW_DEV" "$FW_MNT"
+}
+umount_fw() {
+	[ "${NO_MOUNT:-0}" = 1 ] && return 0
+	umount "$FW_MNT" 2>/dev/null || true
+}
+
+committed_slot() { # parse os_prefix from config.txt
+	mount_fw ro,noatime
+	p=$(sed -n 's/^os_prefix=//p' "$FW_MNT/config.txt" | head -1)
+	umount_fw
+	prefix_slot "${p:-A/}"
+}
+
+booted_slot() {
+	sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE"
+}
+
+commit_slot() { # swap os_prefix lines so $1 is the committed slot
+	new="$1"; old=$(other_slot "$new")
+	mount_fw rw,noatime
+	sed "s|^os_prefix=.*|os_prefix=${new}/|" "$FW_MNT/config.txt"  > "$FW_MNT/config.txt.new"
+	sed "s|^os_prefix=.*|os_prefix=${old}/|" "$FW_MNT/config.txt"  > "$FW_MNT/tryboot.txt.new"
+	mv "$FW_MNT/config.txt.new"  "$FW_MNT/config.txt"
+	mv "$FW_MNT/tryboot.txt.new" "$FW_MNT/tryboot.txt"
+	sync
+	umount_fw
+}
+
+cmd="${1:-}"
+case "$cmd" in
+	get-primary)
+		committed_slot
+		;;
+	set-primary)
+		slot="$2"
+		mkdir -p "$STATE_DIR"
+		if [ "$(committed_slot)" = "$slot" ]; then
+			rm -f "$PENDING" "$TRYBOOT_FLAG"
+		else
+			echo "$slot" > "$PENDING"
+			: > "$TRYBOOT_FLAG"
+		fi
+		;;
+	get-state)
+		slot="$2"
+		cat "$STATE_DIR/state.$slot" 2>/dev/null || echo good
+		;;
+	set-state)
+		slot="$2"; state="$3"
+		mkdir -p "$STATE_DIR"
+		echo "$state" > "$STATE_DIR/state.$slot"
+		if [ "$state" = good ]; then
+			# good on the booted-but-uncommitted slot = commit the switch
+			if [ "$(booted_slot)" = "$slot" ] && [ "$(committed_slot)" != "$slot" ]; then
+				commit_slot "$slot"
+				rm -f "$PENDING" "$TRYBOOT_FLAG"
+			fi
+		else
+			[ "$(cat "$PENDING" 2>/dev/null)" = "$slot" ] && rm -f "$PENDING" "$TRYBOOT_FLAG" || true
+		fi
+		;;
+	*)
+		echo "tryboot-backend: unknown command '$cmd'" >&2
+		exit 1
+		;;
+esac

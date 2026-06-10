@@ -1,2 +1,4 @@
 #!/bin/sh
-exec syslogd -n
+# RO squashfs root: /var/log is immutable, keep syslog on the /run tmpfs.
+mkdir -p /run/log
+exec syslogd -n -O /run/log/messages

@@ -2,7 +2,8 @@
 #
 # shareframe-initramfs
 #
-# Tiny initramfs (~500 KiB) loaded by U-Boot. Its /init parses rauc.slot from
+# Tiny initramfs (~500 KiB) loaded by the Pi firmware (config.txt initramfs
+# directive). Its /init parses rauc.slot from
 # /proc/cmdline, mounts the chosen squashfs slot partition read-only, sets up
 # a tmpfs overlay for writable /, then switch_root into /sbin/init (s6).
 #

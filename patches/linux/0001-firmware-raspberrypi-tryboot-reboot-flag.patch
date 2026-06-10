@@ -1,0 +1,109 @@
+From: Shareframe <johannes-middelberg@gmx.de>
+Subject: [PATCH] firmware: raspberrypi: set tryboot reboot flag via mailbox
+
+Port of the downstream (raspberrypi/linux) reboot notifier: a reboot
+argument containing " tryboot" (e.g. reboot '0 tryboot') sets the
+firmware's one-shot tryboot flag through RPI_FIRMWARE_SET_REBOOT_FLAGS,
+so the next boot uses the [tryboot] section of autoboot.txt (A/B slot).
+
+---
+--- a/include/soc/bcm2835/raspberrypi-firmware.h	2026-06-10 11:34:01.999945262 +0200
++++ b/include/soc/bcm2835/raspberrypi-firmware.h	2026-06-10 11:34:36.202963559 +0200
+@@ -91,6 +91,8 @@
+ 	RPI_FIRMWARE_GET_POE_HAT_VAL =                        0x00030049,
+ 	RPI_FIRMWARE_SET_POE_HAT_VAL =                        0x00030050,
+ 	RPI_FIRMWARE_NOTIFY_XHCI_RESET =                      0x00030058,
++	RPI_FIRMWARE_GET_REBOOT_FLAGS =                       0x00030064,
++	RPI_FIRMWARE_SET_REBOOT_FLAGS =                       0x00038064,
+ 	RPI_FIRMWARE_NOTIFY_DISPLAY_DONE =                    0x00030066,
+ 
+ 	/* Dispmanx TAGS */
+--- a/drivers/firmware/raspberrypi.c	2026-06-10 11:34:01.996637679 +0200
++++ b/drivers/firmware/raspberrypi.c	2026-06-10 11:35:53.800692605 +0200
+@@ -14,6 +14,7 @@
+ #include <linux/of.h>
+ #include <linux/of_platform.h>
+ #include <linux/platform_device.h>
++#include <linux/reboot.h>
+ #include <linux/slab.h>
+ #include <soc/bcm2835/raspberrypi-firmware.h>
+ 
+@@ -273,6 +274,33 @@
+ 	rpi_firmware_put(fw);
+ }
+ 
++static struct rpi_firmware *rpi_reboot_fw;
++
++static int rpi_firmware_notify_reboot(struct notifier_block *nb,
++				      unsigned long action, void *data)
++{
++	struct rpi_firmware *fw = READ_ONCE(rpi_reboot_fw);
++	u32 reboot_flags = 0;
++
++	if (!fw)
++		return 0;
++
++	/* "<partition> tryboot" reboot argument: one-shot A/B fallback flag */
++	if (data && strstr(data, " tryboot"))
++		reboot_flags |= 0x1;
++
++	if (reboot_flags)
++		(void)rpi_firmware_property(fw, RPI_FIRMWARE_SET_REBOOT_FLAGS,
++					    &reboot_flags,
++					    sizeof(reboot_flags));
++
++	return 0;
++}
++
++static struct notifier_block rpi_firmware_reboot_notifier = {
++	.notifier_call = rpi_firmware_notify_reboot,
++};
++
+ static int rpi_firmware_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -301,6 +329,7 @@
+ 	kref_init(&fw->consumers);
+ 
+ 	platform_set_drvdata(pdev, fw);
++	WRITE_ONCE(rpi_reboot_fw, fw);
+ 
+ 	rpi_firmware_print_firmware_revision(fw);
+ 	rpi_register_hwmon_driver(dev, fw);
+@@ -328,6 +357,7 @@
+ 	platform_device_unregister(rpi_clk);
+ 	rpi_clk = NULL;
+ 
++	WRITE_ONCE(rpi_reboot_fw, NULL);
+ 	rpi_firmware_put(fw);
+ }
+ 
+@@ -408,7 +438,27 @@
+ 	.shutdown	= rpi_firmware_shutdown,
+ 	.remove		= rpi_firmware_remove,
+ };
+-module_platform_driver(rpi_firmware_driver);
++static int __init rpi_firmware_init(void)
++{
++	int ret = register_reboot_notifier(&rpi_firmware_reboot_notifier);
++
++	if (ret)
++		return ret;
++
++	ret = platform_driver_register(&rpi_firmware_driver);
++	if (ret)
++		unregister_reboot_notifier(&rpi_firmware_reboot_notifier);
++
++	return ret;
++}
++core_initcall(rpi_firmware_init);
++
++static void __exit rpi_firmware_exit(void)
++{
++	platform_driver_unregister(&rpi_firmware_driver);
++	unregister_reboot_notifier(&rpi_firmware_reboot_notifier);
++}
++module_exit(rpi_firmware_exit);
+ 
+ MODULE_AUTHOR("Eric Anholt <eric@anholt.net>");
+ MODULE_DESCRIPTION("Raspberry Pi firmware driver");

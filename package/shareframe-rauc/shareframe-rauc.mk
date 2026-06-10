@@ -17,7 +17,8 @@ endef
 define SHAREFRAME_RAUC_INSTALL_TARGET_CMDS
 	$(INSTALL) -d -m 0755 $(TARGET_DIR)/etc/rauc
 	$(INSTALL) -m 0644 $(@D)/files/system.conf      $(TARGET_DIR)/etc/rauc/system.conf
-	$(INSTALL) -m 0755 $(@D)/files/post-install.sh  $(TARGET_DIR)/etc/rauc/post-install.sh
+	$(INSTALL) -d -m 0755 $(TARGET_DIR)/usr/lib/rauc
+	$(INSTALL) -m 0755 $(@D)/files/tryboot-backend  $(TARGET_DIR)/usr/lib/rauc/tryboot-backend
 	# CA cert. May be missing if `scripts/gen-dev-keys.sh` was never run.
 	# Install a placeholder so /etc/rauc/ca.cert.pem always exists; real cert
 	# overrides at re-run.
