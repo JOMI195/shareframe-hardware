@@ -23,6 +23,10 @@ if [ -e /run/shareframe/wifi-switching ]; then
     exit 0
 fi
 
+# After the guards on purpose: must not repaint the LED over an intentional
+# shutdown (`off`) or AP switch (`ap-mode`).
+/usr/bin/shareframe-led wifi-connecting 2>/dev/null || true
+
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
         log "already running (triggered by ${SERVICE:-unknown})"

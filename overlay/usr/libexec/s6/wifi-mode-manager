@@ -30,6 +30,15 @@ WEDGE_MAX=20            # connected: cap on the wedged-link backoff threshold
 
 log() { echo "wifi-mode-manager: $*" > /dev/console; }
 
+# Write-on-change only: a periodic unconditional write would stomp the error/
+# updating codes that shareframe-health and the app assert on top of ours.
+LED_STATE=
+set_led() {
+	[ "$1" = "$LED_STATE" ] && return 0
+	shareframe-led "$1" 2>/dev/null || true
+	LED_STATE="$1"
+}
+
 ap_creds() {
 	AP_SSID=shareframe-board
 	AP_PASS=
@@ -67,7 +76,7 @@ enter_connecting() {
 	shareframe-ap down 2>/dev/null || true
 	s6-svc -u "$SVC/wpa_supplicant" 2>/dev/null || true
 	s6-svc -u "$SVC/dhcpcd-wlan"    2>/dev/null || true
-	shareframe-led wifi-connecting 2>/dev/null || true
+	set_led wifi-connecting
 	write_mode connecting
 }
 
@@ -96,7 +105,7 @@ wait_for_sta() {
 
 enter_connected() {
 	log "mode -> connected (ssid=$(cur_ssid))"
-	shareframe-led normal 2>/dev/null || true
+	set_led normal
 	write_mode connected
 }
 
@@ -108,7 +117,7 @@ enter_ap() {
 	s6-svc -d "$SVC/dhcpcd-wlan"    2>/dev/null || true
 	s6-svc -d "$SVC/wpa_supplicant" 2>/dev/null || true
 	shareframe-ap up
-	shareframe-led ap-mode 2>/dev/null || true
+	set_led ap-mode
 	write_mode ap
 }
 
@@ -126,7 +135,7 @@ monitor_connected() {
 		if ! have_assoc; then
 			drops=$((drops + 1))
 			log "assoc lost ($drops/$DROP_LIMIT)"
-			shareframe-led wifi-connecting 2>/dev/null || true
+			set_led wifi-connecting
 			[ "$drops" -ge "$DROP_LIMIT" ] && return
 			continue
 		fi
@@ -134,16 +143,17 @@ monitor_connected() {
 		if have_internet; then
 			wedge=0
 			wedge_limit=$WEDGE_BASE
-			shareframe-led normal 2>/dev/null || true
+			set_led normal
 			write_mode connected
 		else
 			wedge=$((wedge + 1))
-			shareframe-led wifi-down 2>/dev/null || true
+			set_led wifi-down
 			write_mode connected   # internet=false
 			log "associated but no internet ($wedge/$wedge_limit)"
 			if [ "$wedge" -ge "$wedge_limit" ]; then
 				log "re-associating wifi (wedged link)"
 				/usr/libexec/s6/wifi-stack-restart monitor || true
+				LED_STATE=wifi-connecting   # stack-restart set the LED itself
 				wedge=0
 				wedge_limit=$((wedge_limit * 2))
 				[ "$wedge_limit" -gt "$WEDGE_MAX" ] && wedge_limit=$WEDGE_MAX

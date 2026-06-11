@@ -1,3 +1,2 @@
 #!/bin/sh
-/usr/bin/shareframe-led wifi-connecting 2>/dev/null || true
 exec /usr/libexec/s6/wifi-stack-restart dhcpcd-wlan

@@ -1,1 +1,1 @@
-/usr/bin/shareframe-led normal
+/bin/sh -c "[ -f /run/shareframe/wifi-mode ] || /usr/bin/shareframe-led normal 2>/dev/null || true"

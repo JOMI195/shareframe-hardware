@@ -1,41 +1,59 @@
 #!/bin/sh
+# Blink codes are documented in docs/led-status-codes.md.
 set -eu
 LED=/sys/class/leds/ACT
 die() { printf 'shareframe-led: %s\n' "$*" >&2; exit 1; }
 [ $# -eq 1 ] || die "usage: shareframe-led <state>"
 [ -d "$LED" ] || die "ACT LED not found"
 
+# Defaults; overridable via led.conf (shell assignments only, /data wins).
+SHORT=200; LONG=800; GAP=300; CYCLE=2000; NORMAL_CYCLE=9800
+NORMAL="0 1"; WIFI_CONNECTING="0 2"; WIFI_DOWN="0 3"; AP_MODE="0 4"; UPDATING="1 0"
+for conf in /etc/shareframe/led.conf /data/shareframe/led.conf; do
+    [ -r "$conf" ] && . "$conf" || true
+done
+
+# GPIO LEDs report max_brightness 1; the pattern trigger rejects higher values.
+MAXB=$(cat "$LED/max_brightness" 2>/dev/null || echo 1)
+
+# Step tuples (b t b 0 = hold b for t ms, then jump): plain tuples are
+# linearly interpolated by the software pattern trigger, which an on/off
+# GPIO LED cannot render.
+blink() { # $1=#long $2=#short $3=restart-gap-ms
+    p=; n=$1; while [ "$n" -gt 0 ]; do p="$p $MAXB $LONG $MAXB 0 0 $GAP 0 0"; n=$((n-1)); done
+    n=$2; while [ "$n" -gt 0 ]; do p="$p $MAXB $SHORT $MAXB 0 0 $GAP 0 0"; n=$((n-1)); done
+    echo "${p% 0 $GAP 0 0} 0 $3 0 0"
+}
+
+code() { # $1=#long $2=#short $3=restart-gap-ms $4=fallback-delay-on $5=fallback-delay-off
+    if grep -qw pattern "$LED/trigger" 2>/dev/null; then
+        echo pattern > "$LED/trigger"
+        blink "$1" "$2" "$3" > "$LED/pattern"
+    else
+        # No pattern trigger in this kernel: distinguishable even blink rates.
+        echo timer > "$LED/trigger"
+        echo "$4" > "$LED/delay_on"
+        echo "$5" > "$LED/delay_off"
+    fi
+}
+
 case "$1" in
     booting)
         echo heartbeat > "$LED/trigger" ;;
     normal)
-        echo mmc0 > "$LED/trigger" ;;
+        # State vars hold "<#long> <#short>" and split into two args here.
+        code $NORMAL "$NORMAL_CYCLE" 200 9800 ;;
     wifi-connecting)
-        echo timer > "$LED/trigger"
-        echo 100   > "$LED/delay_on"
-        echo 100   > "$LED/delay_off" ;;
+        code $WIFI_CONNECTING "$CYCLE" 200 200 ;;
     wifi-down)
-        echo timer > "$LED/trigger"
-        echo 500   > "$LED/delay_on"
-        echo 2000  > "$LED/delay_off" ;;
+        code $WIFI_DOWN "$CYCLE" 500 2000 ;;
     ap-mode)
-        # Distinct from every other state: three quick blinks then a long gap.
-        if [ -e "$LED/pattern" ]; then
-            echo pattern > "$LED/trigger"
-            echo "255 150 0 150 255 150 0 150 255 150 0 1200" > "$LED/pattern"
-        else
-            # No pattern trigger in this kernel: fall back to a slow even blink.
-            echo timer > "$LED/trigger"
-            echo 700   > "$LED/delay_on"
-            echo 300   > "$LED/delay_off"
-        fi ;;
-    error)
-        echo none > "$LED/trigger"
-        echo 1    > "$LED/brightness" ;;
+        code $AP_MODE "$CYCLE" 800 800 ;;
     updating)
-        echo timer > "$LED/trigger"
-        echo 50    > "$LED/delay_on"
-        echo 50    > "$LED/delay_off" ;;
+        code $UPDATING "$CYCLE" 50 50 ;;
+    error)
+        echo none    > "$LED/trigger"
+        echo "$MAXB" > "$LED/brightness" ;;
     off)
         echo none > "$LED/trigger"
         echo 0    > "$LED/brightness" ;;

@@ -5,3 +5,5 @@
 /usr/bin/shareframe-led off 2>/dev/null || true
 touch /run/shutting-down
 s6-rc -bda change 2>/dev/null
+# Re-assert: services may have repainted the LED before they died.
+/usr/bin/shareframe-led off 2>/dev/null || true

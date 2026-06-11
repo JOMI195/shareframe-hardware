@@ -1,1 +1,1 @@
-/usr/bin/shareframe-led booting
+/bin/sh -c "/usr/bin/shareframe-led booting 2>/dev/null || true"
