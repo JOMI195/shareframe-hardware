@@ -4,7 +4,7 @@
 # Optional per-release scripts releases/<version>/{pre,post}.sh ship inside the
 # signed bundle (pre: install-check, old system, may abort; post: after boot
 # slot is written, old system). Drops shareframe-<version>.raucb +
-# release.json into artifacts/deploy/.
+# release.json into artifacts/release/<version>/.
 #
 # usage: make-release.sh [--version X] [--mode dev|prod] [--criticality C] [--notes FILE]
 #   keys: SHAREFRAME_RELEASE_CERT / SHAREFRAME_RELEASE_KEY (prod; keep offline)
@@ -51,7 +51,7 @@ esac
 [ -f "${IMG_DIR}/rootfs.squashfs" ] || { echo "rootfs.squashfs missing; build first" >&2; exit 1; }
 [ -d "${IMG_DIR}/bootslot-tree" ] || { echo "bootslot-tree missing; build first (post-image.sh stages it)" >&2; exit 1; }
 
-OUT_DIR="${ROOT}/artifacts/deploy"
+OUT_DIR="${ROOT}/artifacts/release/${VERSION}"
 OUT_BUNDLE="${OUT_DIR}/shareframe-${VERSION}.raucb"
 REL_DIR="${ROOT}/releases/${VERSION}"
 
@@ -139,6 +139,8 @@ rm -f "${OUT_BUNDLE}"
 	"${work}" "${OUT_BUNDLE}"
 
 SHA256=$(sha256sum "${OUT_BUNDLE}" | cut -d' ' -f1)
+# sidecar in sha256sum format; the hash string goes into the server's checksum field
+( cd "${OUT_DIR}" && sha256sum "$(basename "${OUT_BUNDLE}")" > "$(basename "${OUT_BUNDLE}").sha256" )
 SIZE=$(stat -c%s "${OUT_BUNDLE}")
 NOTES=""
 [ -n "${NOTES_FILE}" ] && [ -f "${NOTES_FILE}" ] && NOTES="$(sed 's/\\/\\\\/g; s/"/\\"/g' "${NOTES_FILE}" | tr '\n' ' ')"
@@ -158,5 +160,8 @@ cat > "${OUT_DIR}/release.json" <<EOF
 EOF
 
 echo "Bundle:   ${OUT_BUNDLE}"
+echo "Checksum: ${OUT_BUNDLE}.sha256"
 echo "Metadata: ${OUT_DIR}/release.json"
+echo
+echo "sha256 (-> Server-Feld 'checksum'): ${SHA256}"
 ls -lh "${OUT_BUNDLE}"

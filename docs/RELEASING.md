@@ -55,8 +55,9 @@ SHAREFRAME_RELEASE_KEY=~/.shareframe-release-keys/key.pem \
 scripts/make-release.sh --mode prod --criticality Minor
 ```
 
-Ergebnis: `artifacts/deploy/shareframe-<version>.raucb` + `release.json`
-(Version, Criticality, sha256, Größe, Notes).
+Ergebnis: `artifacts/release/<version>/shareframe-<version>.raucb` +
+`shareframe-<version>.raucb.sha256` (Checksum-Datei, `sha256sum -c`-kompatibel)
++ `release.json` (Version, Criticality, sha256, Größe, Notes).
 
 Criticality (`Critical | Important | Minor | Patch`): maßgeblich ist **nur
 der Wert am Server** (Release-Feld); die Boards lesen ihn aus der
@@ -67,15 +68,13 @@ keine Criticality, Ändern am Server wirkt sofort ohne neues Signieren.
 Check automatisch** (Standard alle 6 h). Alles andere wartet auf den
 Dashboard-Button.
 
-### 4. Auf den Server
+### 4. Auf den Server (manuell)
 
-```sh
-scripts/upload-release.sh        # zeigt alle Werte; mit SHAREFRAME_UPLOAD_SSH=user@host:/pfad auch scp
-```
+Im Django-Admin → Frame updates → Releases → Add:
 
-Dann im Django-Admin → Frame updates → Releases → Add:
-
-- version, file (.raucb), checksum (sha256 aus release.json), criticality, notes
+- version, file (die `.raucb`-Datei hochladen), checksum (**Hash-String aus
+  der `.sha256`-Datei** — das Board lehnt den Download bei abweichender
+  Checksum ab), criticality, notes
 - **groups zuweisen + is_active setzen** — ohne Gruppe sieht kein Frame das
   Release (Sichtbarkeit läuft über FrameGroups). Für gestaffelten Rollout:
   erst Testgruppe, dann alle.

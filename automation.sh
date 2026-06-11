@@ -169,8 +169,8 @@ function buildroot() {
 
     echo "=== Generierte Dateien extrahieren ==="
     local img="$src_dir/output/images"
-    rm -rf artifacts/deploy artifacts/sdcard
-    mkdir -p artifacts/deploy artifacts/sdcard
+    rm -rf artifacts/deploy artifacts/sdcard artifacts/release
+    mkdir -p artifacts/deploy artifacts/sdcard artifacts/release
 
     # --- artifacts/deploy/ : Einzelartefakte (QEMU, Debugging) + Release-Bundle.
     cp "$img/zImage"                  artifacts/deploy/
@@ -188,7 +188,7 @@ function buildroot() {
         echo "WARN: sdcard.img nicht gefunden — post-image.sh oder genimage failed?"
     fi
 
-    # --- artifacts/deploy/ : RAUC update bundle (signed). Dev keys via
+    # --- artifacts/release/ : RAUC update bundle (signed) + .sha256. Dev keys via
     # scripts/gen-dev-keys.sh (run once). Bundle is what the C++ app fetches
     # from the server and passes to `rauc install`.
     if [ -f package/shareframe-rauc/files/cert.pem ] && [ -f package/shareframe-rauc/files/key.pem ]; then
@@ -325,8 +325,8 @@ function deploy() {
 
     local board="${BOARD:-root@10.55.0.2}"
     local bundle
-    bundle="$(ls -t artifacts/deploy/shareframe-*.raucb 2>/dev/null | head -1)"
-    [ -n "$bundle" ] || { echo "deploy: kein Bundle in artifacts/deploy/ — erst bauen" >&2; return 1; }
+    bundle="$(ls -t artifacts/release/*/shareframe-*.raucb 2>/dev/null | head -1)"
+    [ -n "$bundle" ] || { echo "deploy: kein Bundle in artifacts/release/<version>/ — erst bauen" >&2; return 1; }
 
     ssh "$board" "mkdir -p /data/cache"
     scp "$bundle" "$board:/data/cache/$(basename "$bundle")"
