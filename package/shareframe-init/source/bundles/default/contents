@@ -26,6 +26,8 @@ wifi-mode-manager
 wait-network-online
 getty-ttyS1
 nginx
+avahi-daemon
+ssdpd
 rauc-reconcile
 rauc-mark-good
 shareframe-data-dirs

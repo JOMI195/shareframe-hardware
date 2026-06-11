@@ -1,0 +1,5 @@
+#!/bin/sh
+# UUID cache on /data: /var is tmpfs, a fresh UUID per boot would duplicate
+# the device entry in router UIs.
+mkdir -p /data/ssdpd
+exec ssdpd -n -s -r 30 -c /data/ssdpd/ssdpd.cache wlan0 usb0
