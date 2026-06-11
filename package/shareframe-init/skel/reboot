@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Rebooting..."
+exec /etc/s6-linux-init/current/bin/reboot "$@"

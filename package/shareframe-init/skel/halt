@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Halting..."
+exec /etc/s6-linux-init/current/bin/halt "$@"

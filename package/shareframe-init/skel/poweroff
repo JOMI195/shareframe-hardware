@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Shutting down..."
+exec /etc/s6-linux-init/current/bin/poweroff "$@"

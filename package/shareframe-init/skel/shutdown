@@ -1,4 +1,5 @@
 #!/bin/sh
 # Bare "shutdown" = poweroff now; with args = sysv-style s6-linux-init-shutdown.
-[ $# -eq 0 ] && exec s6-linux-init-shutdown -p now
+[ $# -eq 0 ] && echo "Shutting down..." && exec s6-linux-init-shutdown -p now
+echo "Shutting down..."
 exec s6-linux-init-shutdown "$@"

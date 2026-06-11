@@ -36,9 +36,9 @@ define SHAREFRAME_INIT_INSTALL_TARGET_CMDS
 	ln -sf /etc/s6-linux-init/current/bin/init $(TARGET_DIR)/init
 
 	# 3b) sysv power commands -> s6 clean shutdown (overwrite busybox applet symlinks)
-	ln -sf /etc/s6-linux-init/current/bin/reboot   $(TARGET_DIR)/sbin/reboot
-	ln -sf /etc/s6-linux-init/current/bin/poweroff $(TARGET_DIR)/sbin/poweroff
-	ln -sf /etc/s6-linux-init/current/bin/halt     $(TARGET_DIR)/sbin/halt
+	$(INSTALL) -m 0755 $(@D)/skel/reboot   $(TARGET_DIR)/sbin/reboot
+	$(INSTALL) -m 0755 $(@D)/skel/poweroff $(TARGET_DIR)/sbin/poweroff
+	$(INSTALL) -m 0755 $(@D)/skel/halt     $(TARGET_DIR)/sbin/halt
 	$(INSTALL) -m 0755 $(@D)/skel/shutdown $(TARGET_DIR)/sbin/shutdown
 
 	# 4) Host/Target-Pfad-Symlinks (execlineb in /bin, oneshot-run in /libexec)
