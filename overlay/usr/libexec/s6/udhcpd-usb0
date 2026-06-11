@@ -1,9 +1,8 @@
 #!/bin/sh
-# Single-lease DHCP server on usb0: a plugged-in host (laptop or 4B) gets
-# 10.55.0.1 automatically and SSH on root@10.55.0.2 just works.
+# Single-lease DHCP server on usb0: plugged-in host gets 10.55.0.2, board = 10.55.0.1.
 
 # Wait for usb0 + IP from setup-usb0 oneshot.
-until ip -4 -o addr show usb0 2>/dev/null | grep -q '10\.55\.0\.2'; do
+until ip -4 -o addr show usb0 2>/dev/null | grep -q '10\.55\.0\.1'; do
 	sleep 1
 done
 

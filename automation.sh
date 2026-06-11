@@ -12,6 +12,11 @@ PI4B_SERIAL="${PI4B_SERIAL:-/dev/ttyACM0}"   # Raspberry Pi Debug Probe am 4B = 
 
 [[ -d artifacts ]] || mkdir artifacts
 
+validate_version() {
+    [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo "Invalid version format '$1' — expected X.Y.Z" >&2; return 1; }
+}
+
 # download given uri and return name of downloaded file
 function get_uri_prefetch() {
     local dir="${2:-.}"
@@ -169,29 +174,33 @@ function buildroot() {
 
     echo "=== Generierte Dateien extrahieren ==="
     local img="$src_dir/output/images"
-    rm -rf artifacts/deploy artifacts/sdcard artifacts/release
-    mkdir -p artifacts/deploy artifacts/sdcard artifacts/release
+    local artifact_label="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
 
-    # --- artifacts/deploy/ : Einzelartefakte (QEMU, Debugging) + Release-Bundle.
-    cp "$img/zImage"                  artifacts/deploy/
-    cp "$img/bcm2835-rpi-zero-w.dtb"  artifacts/deploy/
-    [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" artifacts/deploy/
-    cp "$img/rootfs.squashfs"         artifacts/deploy/
-    cp "$img/initramfs.cpio.gz"       artifacts/deploy/
+    rm -rf "artifacts/deploy/$artifact_label" "artifacts/sdcard/$artifact_label"
+    mkdir -p "artifacts/deploy/$artifact_label" "artifacts/sdcard/$artifact_label"
 
-    # --- artifacts/sdcard/ : komplettes SD-Image (fw + boot A/B + rootfs A/B + /data)
+    # --- artifacts/deploy/<label>/ : Einzelartefakte (QEMU, Debugging).
+    cp "$img/zImage"                  "artifacts/deploy/$artifact_label/"
+    cp "$img/bcm2835-rpi-zero-w.dtb"  "artifacts/deploy/$artifact_label/"
+    [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" "artifacts/deploy/$artifact_label/"
+    cp "$img/rootfs.squashfs"         "artifacts/deploy/$artifact_label/"
+    cp "$img/initramfs.cpio.gz"       "artifacts/deploy/$artifact_label/"
+    ln -sfn "$artifact_label" artifacts/deploy/latest
+
+    # --- artifacts/sdcard/<label>/ : komplettes SD-Image (fw + boot A/B + rootfs A/B + /data)
     # via genimage (BR2_ROOTFS_POST_IMAGE_SCRIPT = board/raspberrypi0w/post-image.sh).
     # Einmaliges `dd if=sdcard.img of=/dev/sdX` legt alle Partitionen an.
     if [ -f "$img/sdcard.img" ]; then
-        cp "$img/sdcard.img" artifacts/sdcard/
+        cp "$img/sdcard.img" "artifacts/sdcard/$artifact_label/"
     else
         echo "WARN: sdcard.img nicht gefunden — post-image.sh oder genimage failed?"
     fi
+    ln -sfn "$artifact_label" artifacts/sdcard/latest
 
-    echo "=== Auswertung ==="
-    file "$(realpath artifacts/deploy/zImage)"
-    [ -f artifacts/deploy/rootfs.squashfs ] && file "$(realpath artifacts/deploy/rootfs.squashfs)"
-    [ -f artifacts/sdcard/sdcard.img ] && file "$(realpath artifacts/sdcard/sdcard.img)"
+    echo "=== Auswertung (${artifact_label}) ==="
+    file "$(realpath "artifacts/deploy/$artifact_label/zImage")"
+    [ -f "artifacts/deploy/$artifact_label/rootfs.squashfs" ] && file "$(realpath "artifacts/deploy/$artifact_label/rootfs.squashfs")"
+    [ -f "artifacts/sdcard/$artifact_label/sdcard.img" ] && file "$(realpath "artifacts/sdcard/$artifact_label/sdcard.img")"
 }
 
 function qemu_rpi0() {
@@ -210,9 +219,9 @@ function qemu_rpi0() {
         -M raspi0 \
         -nographic \
         -serial null -serial mon:stdio \
-        -kernel artifacts/deploy/zImage \
-        -dtb artifacts/deploy/bcm2835-rpi-zero-w.dtb \
-        -initrd artifacts/deploy/initramfs.cpio.gz \
+        -kernel artifacts/deploy/latest/zImage \
+        -dtb artifacts/deploy/latest/bcm2835-rpi-zero-w.dtb \
+        -initrd artifacts/deploy/latest/initramfs.cpio.gz \
         -append "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/ram0 rw initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init"
 }
 
@@ -279,21 +288,28 @@ function clean() {
 }
 
 function build() {
-  echo "=== Bauen==="
+  echo "=== Bauen ==="
 
-  # Optionaler Config-Ordner: ./automation.sh build configs/<kunde>
-  # Buendelt Mode/Profile, Pfade zu externen Projekten (config.env) und einen
-  # privaten 2. Overlay (<configdir>/overlay) mit Secrets/WLAN. Ohne Argument
-  # bleibt das bisherige Verhalten (Env-Defaults, getrackte .template).
-  local config_dir="${1:-}"
+  # usage: ./automation.sh build [configs/<kunde>] [--version X.Y.Z]
+  local config_dir="" version=""
+  while [ $# -gt 0 ]; do
+      case "$1" in
+          --version) version="$2"; shift 2 ;;
+          *) config_dir="$1"; shift ;;
+      esac
+  done
+
+  if [ -n "$version" ]; then
+      validate_version "$version"
+      export SHAREFRAME_VERSION="$version"
+      echo "=== Version: $version ==="
+  fi
+
   if [ -n "$config_dir" ]; then
       config_dir="${config_dir%/}"
       [ -d "$config_dir" ] || { echo "build: config dir '$config_dir' not found" >&2; return 1; }
       [ -f "$config_dir/config.env" ] || { echo "build: '$config_dir/config.env' not found" >&2; return 1; }
       echo "=== Config: $config_dir ==="
-      # config.env setzt SHAREFRAME_BUILD_MODE/PROFILE, optionale *_OVERRIDE_SRCDIR und
-      # SHAREFRAME_CONFIG_LABEL. set -a exportiert sie, sodass buildroot() und die
-      # Buildroot-Skripte (post-build.sh) sie aus der Umgebung lesen.
       # shellcheck disable=SC1090,SC1091
       set -a; . "$config_dir/config.env"; set +a
   fi
@@ -318,22 +334,30 @@ function connect_serial() {
 }
 
 function release() {
-    # Signiertes RAUC-Bundle aus den AKTUELLEN Build-Artefakten erzeugen
-    # (Wrapper um scripts/make-release.sh). Vorher `./automation.sh build [configs/...]`
-    # — der Image-Trust-Anchor muss zum Modus passen (Dev-Board nimmt nur
-    # dev-signiert, Prod nur prod-signiert). Prod verdrahtet die Offline-Keys
-    # aus ~/.shareframe-release-keys automatisch.
-    # usage: ./automation.sh release <dev|prod> [--version X] [--criticality C] [--notes FILE]
+    # usage: ./automation.sh release <dev|prod> --version X.Y.Z [--criticality C] [--notes FILE]
     local mode="${1:-dev}"; shift || true
+    local version=""
+    local args=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --version) version="$2"; shift 2 ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done
+
+    [ -n "$version" ] || { echo "release: --version required" >&2; return 1; }
+    validate_version "$version"
+    [ -d "releases/${version}" ] || { echo "release: releases/${version}/ not found — create it first" >&2; return 1; }
     [ -f buildroot/src/output/images/rootfs.squashfs ] || {
-        echo "release: kein Build gefunden — zuerst ./automation.sh build [configs/...]" >&2; return 1; }
+        echo "release: kein Build gefunden — zuerst ./automation.sh build --version ${version} [configs/...]" >&2; return 1; }
+
     case "$mode" in
         dev)
-            echo "=== Release (dev) ==="
-            scripts/make-release.sh --mode dev "$@"
+            echo "=== Release ${version} (dev) ==="
+            scripts/make-release.sh --mode dev --version "$version" "${args[@]}"
             ;;
         prod)
-            echo "=== Release (prod) ==="
+            echo "=== Release ${version} (prod) ==="
             local keydir="${SHAREFRAME_RELEASE_KEYDIR:-$HOME/.shareframe-release-keys}"
             : "${SHAREFRAME_RELEASE_CERT:=$keydir/cert.pem}"
             : "${SHAREFRAME_RELEASE_KEY:=$keydir/key.pem}"
@@ -341,10 +365,10 @@ function release() {
                 echo "release: Prod-Keys fehlen in $keydir (scripts/gen-prod-keys.sh)" >&2; return 1; }
             SHAREFRAME_RELEASE_CERT="$SHAREFRAME_RELEASE_CERT" \
             SHAREFRAME_RELEASE_KEY="$SHAREFRAME_RELEASE_KEY" \
-            scripts/make-release.sh --mode prod "$@"
+            scripts/make-release.sh --mode prod --version "$version" "${args[@]}"
             ;;
         *)
-            echo "release: Modus muss dev oder prod sein (usage: ./automation.sh release <dev|prod> [--version X] [--criticality C] [--notes FILE])" >&2
+            echo "release: Modus muss dev oder prod sein" >&2
             return 1
             ;;
     esac

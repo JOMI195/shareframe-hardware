@@ -1,7 +1,5 @@
 #!/bin/bash
-# BR2_ROOTFS_POST_IMAGE_SCRIPT: build the single boot FAT (firmware +
-# config.txt/tryboot.txt + per-slot A/ B/ kernel sets) and assemble
-# sdcard.img. SHAREFRAME_BUILD_MODE=dev adds verbose firmware UART log.
+# Build boot FAT (firmware + A/B kernel sets) and assemble sdcard.img.
 set -euo pipefail
 
 BOARD_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,17 +20,15 @@ for f in zImage bcm2835-rpi-zero-w.dtb spi0-spidev.dtbo initramfs.cpio.gz; do
 	[ -f "${BINARIES_DIR}/${f}" ] || { echo "post-image: ${BINARIES_DIR}/${f} missing" >&2; exit 1; }
 done
 
-# render the config template: $1 = os_prefix value, output to stdout
 render_config() {
 	sed "s|@OS_PREFIX@|$1|" "${BOARD_DIR}/config.txt"
 	[ "${MODE}" = dev ] && echo "uart_2ndstage=1" || true
 }
 
-# per-slot kernel set under <tree>/<slot>/
 stage_slot_dir() { # <slot A|B> <dir>
 	local slot="$1" dir="$2"
 	mkdir -p "${dir}/overlays"
-	# firmware only honors per-prefix overlays if ${os_prefix}overlays/README exists
+	# os_prefix requires overlays/README to exist in each slot subdir
 	echo "per-slot overlays (os_prefix marker)" > "${dir}/overlays/README"
 	sed "s/@SLOT@/${slot}/" "${BOARD_DIR}/cmdline.txt" > "${dir}/cmdline.txt"
 	cp "${BINARIES_DIR}/zImage"                 "${dir}/zImage"
@@ -50,8 +46,7 @@ render_config "B/" > "${TREE}/tryboot.txt"
 stage_slot_dir A "${TREE}/A"
 stage_slot_dir B "${TREE}/B"
 
-# slot-neutral subtree for make-release boot.tar (cmdline keeps @SLOT@;
-# the bundle's slot-install hook substitutes it for the target slot)
+# slot-neutral boot.tar tree for make-release (hook seds @SLOT@)
 SLOT_TREE="${BINARIES_DIR}/bootslot-tree"
 rm -rf "${SLOT_TREE}"
 mkdir -p "${SLOT_TREE}"
@@ -63,8 +58,7 @@ echo "per-slot overlays (os_prefix marker)" > "${SLOT_TREE}/overlays/README"
 cp "${BINARIES_DIR}/spi0-spidev.dtbo"       "${SLOT_TREE}/overlays/spi0-spidev.dtbo"
 cp "${BINARIES_DIR}/initramfs.cpio.gz"      "${SLOT_TREE}/initramfs.cpio.gz"
 
-# mkfs defaults (FAT16 at 64MiB) — the exact filesystem the bootcode->start.elf
-# chain was proven with on this hardware; FAT32 -s 1 hung bootcode.
+# FAT16 at 64MiB — proven geometry; FAT32 -s 1 hung bootcode on this SoC.
 rm -f "${BINARIES_DIR}/boot.vfat"
 "${MKFS_VFAT}" -C -n BOOT "${BINARIES_DIR}/boot.vfat" 65536 >/dev/null
 "${MCOPY}" -i "${BINARIES_DIR}/boot.vfat" -spQ "${TREE}"/* ::/

@@ -1,7 +1,5 @@
 #!/bin/sh
-# First boot: grow /data (p4, last partition) to the end of the card, then
-# resize.f2fs. Idempotent: no-op once p4 ends near the device end. Must run
-# before mount-data (resize.f2fs needs the fs unmounted).
+# First boot: grow /data (p4) to end of card. Runs before mount-data.
 set -e
 DISK=/dev/mmcblk0
 PART=/dev/mmcblk0p4
@@ -16,7 +14,6 @@ part_end=$((part_start + part_size))
 
 echo "expand-data: growing p4 to end of card (${disk_sectors} sectors)"
 echo ", +" | sfdisk --no-reread --force -N 4 "$DISK"
-# Kernel can't BLKRRPART with root mounted on p2/p3; partx uses BLKPG instead.
 partx -u "$DISK"
 resize.f2fs "$PART" || {
 	echo "expand-data: resize.f2fs failed; fsck then retry once"

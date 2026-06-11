@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
-# Build a signed RAUC release bundle (verity) from the latest build artifacts:
-#   rootfs.squashfs (rootfs slot) + boot.tar (boot slot file set) + hook.sh.
-# Optional per-release scripts releases/<version>/{pre,post}.sh ship inside the
-# signed bundle (pre: install-check, old system, may abort; post: after boot
-# slot is written, old system). Drops shareframe-<version>.raucb +
-# release.json into artifacts/release/<version>/.
-#
+# Build signed RAUC bundle (verity): rootfs.squashfs + boot.tar + hook.sh.
 # usage: make-release.sh [--version X] [--mode dev|prod] [--criticality C] [--notes FILE]
-#   keys: SHAREFRAME_RELEASE_CERT / SHAREFRAME_RELEASE_KEY (prod; keep offline)
-#         default = dev keys in package/shareframe-rauc/files/
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,10 +20,6 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-if [ -z "${VERSION}" ]; then
-	VERSION_TOML="${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-${ROOT}/../shareframe-board}/VERSION.toml"
-	[ -f "${VERSION_TOML}" ] && VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "${VERSION_TOML}")"
-fi
 [ -n "${VERSION}" ] || VERSION="${BUILD_SHA:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || date +%s)}"
 
 case "${MODE}" in
@@ -59,19 +47,14 @@ work=$(mktemp -d)
 trap 'rm -rf "${work}"' EXIT
 
 cp "${IMG_DIR}/rootfs.squashfs" "${work}/rootfs.squashfs"
-# per-slot kernel set (slot-neutral: cmdline.txt ships rauc.slot=@SLOT@, the
-# slot-install hook substitutes the target slot)
 tar -C "${IMG_DIR}/bootslot-tree" -cf "${work}/boot.tar" .
 
-# hook.sh: fixed cmdline fix-up + optional per-release pre/post scripts.
 {
 	cat <<'HOOK'
 #!/bin/sh
 set -e
 case "$1" in
 	install-check)
-		# RAUC already enforced manifest<->system compatible. Extra checks below.
-		# back up per-device /data files before the slot is written (old system)
 		command -v shareframe-update-verify >/dev/null 2>&1 && shareframe-update-verify backup || true
 HOOK
 	if [ -f "${REL_DIR}/pre.sh" ]; then
@@ -81,8 +64,7 @@ HOOK
 	cat <<'HOOK'
 		;;
 	slot-install)
-		# full-custom install of the boot image: replace the target slot's
-		# subdir (A/ or B/) on the shared boot FAT (p1)
+		# replace target slot's subdir (A/ or B/) on boot FAT (p1)
 		case "${RAUC_SLOT_CLASS}" in
 			boot)
 				bn="${RAUC_SLOT_BOOTNAME}"
@@ -93,7 +75,6 @@ HOOK
 				trap 'umount "${mnt}" 2>/dev/null || true' EXIT
 				rm -rf "${mnt}/${bn}.new"
 				mkdir -p "${mnt}/${bn}.new"
-				# RAUC_IMAGE_NAME is the absolute path inside the mounted bundle
 				tar -xf "${RAUC_IMAGE_NAME}" -C "${mnt}/${bn}.new"
 				sed -i "s/rauc\.slot=[A-Z@SLOT]*/rauc.slot=${bn}/" "${mnt}/${bn}.new/cmdline.txt"
 				rm -rf "${mnt}/${bn}"

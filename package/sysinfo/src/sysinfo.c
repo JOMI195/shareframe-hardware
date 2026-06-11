@@ -155,7 +155,7 @@ static void row(const char *label, const char *value)
 {
 	if (!value || !*value)
 		return;
-	printf("  %s%-8s%s %s\n", C_LABEL, label, C_RESET, value);
+	printf("%s%-8s%s %s\n", C_LABEL, label, C_RESET, value);
 }
 
 static void disk_row(const char *label, const char *total_key, const char *free_key)
@@ -197,7 +197,7 @@ int main(int argc, char **argv)
 		snprintf(title, sizeof title, "%s@%s", user, host);
 	else
 		snprintf(title, sizeof title, "%s", user);
-	printf("\n  %s%s%s\n  ", C_LABEL, title, C_RESET);
+	printf("\n%s%s%s\n", C_LABEL, title, C_RESET);
 	for (size_t i = 0, n = strlen(title); i < n; i++)
 		putchar('-');
 	putchar('\n');

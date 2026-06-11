@@ -1,12 +1,7 @@
 #!/bin/sh
-# RAUC custom bootloader backend for the Pi firmware tryboot A/B scheme.
-# Called by rauc as: get-primary | get-state <A|B> | set-primary <A|B> |
-# set-state <A|B> <good|bad>.
-#
-# A/B lives in ONE boot FAT (p1): config.txt has os_prefix=<committed>/,
-# tryboot.txt has os_prefix=<other>/. start.elf loads tryboot.txt instead of
-# config.txt when the one-shot tryboot flag is set. Commit = swap the two
-# os_prefix lines. Pending/staged slot + per-slot states live on /data.
+# RAUC custom bootloader backend for Pi firmware tryboot A/B.
+# A/B via os_prefix on p1: config.txt = committed, tryboot.txt = other.
+# Commit = swap the two os_prefix lines.
 set -eu
 
 FW_DEV="${FW_DEV:-/dev/mmcblk0p1}"
@@ -25,7 +20,6 @@ prefix_slot() { # "A/" -> A
 }
 other_slot() { [ "$1" = A ] && echo B || echo A; }
 
-# NO_MOUNT=1: host tests point FW_MNT at a fixture dir, no real vfat mount.
 mount_fw() {
 	[ "${NO_MOUNT:-0}" = 1 ] && return 0
 	mkdir -p "$FW_MNT"

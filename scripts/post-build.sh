@@ -17,22 +17,22 @@ echo "=== Post-build: Build-Stempel erzeugen ==="
 
 echo "=== Post-build: /etc/build-info geschrieben ==="
 
-# /etc/shareframe-release: single version source for the app, the RAUC bundle
-# manifest and the server compare. SHAREFRAME_VERSION env wins (make-release),
-# else the app's VERSION.toml, else the git sha.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${SHAREFRAME_VERSION:-}"
-if [ -z "$VERSION" ]; then
-    VERSION_TOML="${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-$SCRIPT_DIR/../../shareframe-board}/VERSION.toml"
-    [ -f "$VERSION_TOML" ] && VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$VERSION_TOML")"
-fi
-[ -n "$VERSION" ] || VERSION="${BUILD_SHA:-unknown}"
+
+# /etc/shareframe-release: single version source for the app, the RAUC bundle
+# manifest and the server compare. SHAREFRAME_VERSION (set by automation.sh
+# build --version) wins, else the git sha.
+VERSION="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
 {
     echo "VERSION=${VERSION}"
     echo "BUILD_SHA=${BUILD_SHA:-unknown}"
     echo "BUILD_DATE=$(date --iso-8601=seconds)"
 } > "$TARGET_DIR/etc/shareframe-release"
 echo "=== Post-build: /etc/shareframe-release VERSION=${VERSION} ==="
+
+mkdir -p "$TARGET_DIR/etc/shareframe"
+printf 'version = "%s"\n' "${VERSION}" > "$TARGET_DIR/etc/shareframe/VERSION.toml"
+echo "=== Post-build: /etc/shareframe/VERSION.toml ==="
 
 if [ -n "$BUILD_SHA" ]; then
     {
