@@ -4,9 +4,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-IMG_DIR="${ROOT}/buildroot/src/output/images"
-HOST_BIN="${ROOT}/buildroot/src/output/host/bin"
-DEV_KEYS="${ROOT}/package/shareframe-rauc/files"
+IMG_DIR="${ROOT}/build/buildroot/output/images"
+HOST_BIN="${ROOT}/build/buildroot/output/host/bin"
+DEV_KEYS="${ROOT}/br2-external/package/shareframe-rauc/files"
 
 # criticality must match the server's choices: Critical|Important|Minor|Patch
 VERSION="" MODE="dev" CRITICALITY="Minor" NOTES_FILE=""

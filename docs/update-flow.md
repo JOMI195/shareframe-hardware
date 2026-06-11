@@ -60,7 +60,7 @@ auf den alten Slot zurück.
 
 | | Dev | Prod |
 |---|---|---|
-| Signatur-Keys | `package/shareframe-rauc/files/` (gen-dev-keys.sh, gitignored) | `~/.shareframe-release-keys/` (gen-prod-keys.sh, offline) |
+| Signatur-Keys | `br2-external/package/shareframe-rauc/files/` (gen-dev-keys.sh, gitignored) | `~/.shareframe-release-keys/` (gen-prod-keys.sh, offline) |
 | Trust-Anchor im Image | Dev-CA (Paket-Install) | `configs/prod-local/overlay/etc/rauc/ca.cert.pem` (Overlay gewinnt) |
 | Bundles gegenseitig | Prod-Board lehnt Dev-Bundle ab und umgekehrt (anderer CA) | |
 | `SHAREFRAME_BUILD_MODE` | `dev`: `uart_2ndstage=1` (Firmware-UART-Log) | `prod`: still |

@@ -61,7 +61,7 @@ echo "=== Post-build: /etc/shareframe-profile=${PROFILE} ==="
 
 # Compile the SPI DT overlay. Ships in each FAT boot slot (overlays/), applied
 # by the firmware via dtoverlay=spi0-spidev in the per-slot config.txt.
-OVERLAY_SRC="${SCRIPT_DIR}/../board/raspberrypi0w/overlays/spi0-spidev.dts"
+OVERLAY_SRC="${SCRIPT_DIR}/../br2-external/board/raspberrypi0w/overlays/spi0-spidev.dts"
 DTC="${HOST_DIR}/bin/dtc"
 if [ -x "${DTC}" ] && [ -f "${OVERLAY_SRC}" ]; then
     mkdir -p "${TARGET_DIR}/boot"

@@ -14,7 +14,7 @@
 ################################################################################
 
 SHAREFRAME_BOARD_VERSION = 1.0.0
-SHAREFRAME_BOARD_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/../shareframe-board
+SHAREFRAME_BOARD_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/../../shareframe-board
 SHAREFRAME_BOARD_SITE_METHOD = local
 SHAREFRAME_BOARD_LICENSE = ISC
 

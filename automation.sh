@@ -11,6 +11,7 @@ PI4B="${PI4B:-base@shareframe-base}"
 PI4B_SERIAL="${PI4B_SERIAL:-/dev/ttyACM0}"   # Raspberry Pi Debug Probe am 4B = CDC-ACM
 
 [[ -d artifacts ]] || mkdir artifacts
+[[ -d build ]] || mkdir build
 
 validate_version() {
     [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
@@ -77,7 +78,7 @@ function toolchain() {
     echo "=== Toolchain herunterladen, prüfen, entpacken ==="
     local src_uri="$TOOLCHAIN_BASE_URL/$TOOLCHAIN_NAME.tar.xz"
     local sig_uri="$TOOLCHAIN_BASE_URL/$TOOLCHAIN_NAME.sha256"
-    local src_dir="toolchain/src"
+    local src_dir="build/toolchain"
     local marker="bin/arm-buildroot-linux-musleabihf-gcc"
 
     prepare_src \
@@ -113,7 +114,7 @@ function buildroot() {
     echo "=== Buildroot herunterladen und entpacken ==="
     local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
     local sig_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz.sign"
-    local src_dir="buildroot/src"
+    local src_dir="build/buildroot"
 
     prepare_src \
       "$src_uri" \
@@ -122,8 +123,8 @@ function buildroot() {
 
     echo "=== Buildroot konfigurieren ==="
     make -C "$src_dir" \
-      BR2_DEFCONFIG="$(realpath "$(dirname "$src_dir")/${config}.conf")" \
-      BR2_EXTERNAL="$(realpath .)" \
+      BR2_DEFCONFIG="$(realpath "br2-external/configs/${config}.conf")" \
+      BR2_EXTERNAL="$(realpath br2-external)" \
       defconfig
 
     # Config-Ordner: privaten 2. Overlay registrieren + externe Pfade als local.mk.
@@ -133,9 +134,9 @@ function buildroot() {
     : > "$src_dir/local.mk"
     if [ -n "$config_dir" ] && [ -d "$config_dir/overlay" ]; then
         # Last-wins in Kconfig -> diese Zeile ueberschreibt das BR2_ROOTFS_OVERLAY
-        # der defconfig; getracktes ../../overlay bleibt erster Overlay, der
-        # Config-Overlay ergaenzt/ueberschreibt darueber.
-        printf 'BR2_ROOTFS_OVERLAY="../../overlay %s"\n' \
+        # der defconfig; getracktes ../../br2-external/overlay bleibt erster Overlay,
+        # der Config-Overlay ergaenzt/ueberschreibt darueber.
+        printf 'BR2_ROOTFS_OVERLAY="../../br2-external/overlay %s"\n' \
             "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
         echo "=== 2. Overlay: $(realpath "$config_dir/overlay") ==="
     fi
@@ -156,7 +157,7 @@ function buildroot() {
     make -C "$src_dir" rpi-firmware-dirclean
     make -C "$src_dir" shareframe-init-dirclean
     make -C "$src_dir" linux-reconfigure
-    for mk in modules/*/*.mk package/*/*.mk; do
+    for mk in br2-external/modules/*/*.mk br2-external/package/*/*.mk; do
         [ -e "$mk" ] || continue
         grep -qF 'eval $(host-' "$mk" && continue
         make -C "$src_dir" "$(basename "$mk" .mk)-reconfigure"
@@ -257,8 +258,7 @@ function clean() {
         esac
     done
 
-    local src_dir="buildroot/src"
-    local toolchain_dir="toolchain"
+    local src_dir="build/buildroot"
     echo "=== Aufräumen ==="
 
     if [ -d "$src_dir" ]; then
@@ -276,15 +276,15 @@ function clean() {
 
     if [ "$mode" = "toolchain" ]; then
         echo "=== Toolchain entfernen ==="
-        rm -rf "$toolchain_dir/src"
-        rm -f "$toolchain_dir/$TOOLCHAIN_NAME.tar.xz" "$toolchain_dir/$TOOLCHAIN_NAME.sha256"
+        rm -rf "build/toolchain"
+        rm -f "build/$TOOLCHAIN_NAME.tar.xz" "build/$TOOLCHAIN_NAME.sha256"
     fi
 
-    rm -rf artifacts/ buildroot/src/output/
-    rm -f buildroot/buildroot-*.tar.gz buildroot/buildroot-*.tar.gz.sign
+    rm -rf artifacts/ build/buildroot/output/
+    rm -f build/buildroot-*.tar.gz build/buildroot-*.tar.gz.sign
 
     echo "=== Modul-Build-Artefakte entfernen ==="
-    rm -rf modules/*/src/{.tmp_versions,*.o,*.ko,*.mod,*.mod.c,*.mod.o,Module.symvers,modules.order,.*.cmd}
+    rm -rf br2-external/modules/*/src/{.tmp_versions,*.o,*.ko,*.mod,*.mod.c,*.mod.o,Module.symvers,modules.order,.*.cmd}
 }
 
 function build() {
@@ -316,7 +316,7 @@ function build() {
 
   local sha
   sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  printf 'CONFIG_LOCALVERSION="-%s"\n' "$sha" > fragments/kernel-localversion.fragment
+  printf 'CONFIG_LOCALVERSION="-%s"\n' "$sha" > br2-external/fragments/kernel-localversion.fragment
   export BUILD_SHA="$sha"
 
   toolchain
@@ -348,7 +348,7 @@ function release() {
     [ -n "$version" ] || { echo "release: --version required" >&2; return 1; }
     validate_version "$version"
     [ -d "releases/${version}" ] || { echo "release: releases/${version}/ not found — create it first" >&2; return 1; }
-    [ -f buildroot/src/output/images/rootfs.squashfs ] || {
+    [ -f build/buildroot/output/images/rootfs.squashfs ] || {
         echo "release: kein Build gefunden — zuerst ./automation.sh build --version ${version} [configs/...]" >&2; return 1; }
 
     case "$mode" in

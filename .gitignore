@@ -1,29 +1,22 @@
-# Build artifacts
+# Build output + caches (buildroot/toolchain checkouts, downloaded tarballs)
 artifacts/
-busybox/src/
-buildroot/src
-toolchain/src
-kernel-localversion.fragment
+build/
+br2-external/fragments/kernel-localversion.fragment
 
-modules/**/*.o
-modules/**/*.ko
-modules/**/*.mod
-modules/**/*.mod.c
-modules/**/.*.cmd
-modules/**/Module.symvers
-modules/**/modules.order
-modules/**/.tmp_versions/
-modules/**/built-in.a
+# Kernel module build artifacts
+br2-external/modules/**/*.o
+br2-external/modules/**/*.ko
+br2-external/modules/**/*.mod
+br2-external/modules/**/*.mod.c
+br2-external/modules/**/.*.cmd
+br2-external/modules/**/Module.symvers
+br2-external/modules/**/modules.order
+br2-external/modules/**/.tmp_versions/
+br2-external/modules/**/built-in.a
 
-# Downloaded files
-linux-*.tar*
-busybox-*.tar*
-buildroot-*.tar*
-armv6-*.tar*
-armv6-*.sha256
-
-# Only local header include dir for modules
+# Only local header include dir for modules + stray CMake host probe
 CMakeLists.txt
+CMakeFiles/
 
 # Object files
 *.o
@@ -76,8 +69,8 @@ wpa_supplicant.conf.default
 .env.secrets.toml.default
 
 # RAUC dev signing keys (regenerate via scripts/gen-dev-keys.sh)
-package/shareframe-rauc/files/*.pem
-package/shareframe-rauc/files/*.srl
+br2-external/package/shareframe-rauc/files/*.pem
+br2-external/package/shareframe-rauc/files/*.srl
 
 # Per-customer deploy configs (privat). Nur das Beispiel ist getrackt; die
 # Negation muss UNTER den Secret-Patterns oben stehen (spaetere Regel gewinnt),
@@ -86,5 +79,9 @@ configs/*
 !configs/example/
 !configs/example/**
 
-# Created releases
-releases/
+# Per-release hooks (privat). Nur das Beispiel + README sind getrackt; jede
+# echte releases/<X.Y.Z>/ bleibt ungetrackt.
+releases/*
+!releases/example/
+!releases/example/**
+!releases/README

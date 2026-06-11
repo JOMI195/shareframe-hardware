@@ -3,7 +3,7 @@
 ################################################################################
 
 SYSINFO_VERSION = 1.0
-SYSINFO_SITE = $(TOPDIR)/../../package/sysinfo/src
+SYSINFO_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/package/sysinfo/src
 SYSINFO_SITE_METHOD = local
 
 define SYSINFO_BUILD_CMDS

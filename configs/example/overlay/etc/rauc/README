@@ -1,0 +1,8 @@
+Drop the PROD trust anchor here as ca.cert.pem:
+
+  scripts/gen-prod-keys.sh                 # once; keys stay in ~/.shareframe-release-keys
+  cp ~/.shareframe-release-keys/ca.cert.pem configs/prod-local/overlay/etc/rauc/ca.cert.pem
+
+This overlay applies after packages, so it replaces the dev CA from
+package/shareframe-rauc/files/ in prod-local builds. The CA cert is public —
+committing it is fine; the private keys must never enter the repo.

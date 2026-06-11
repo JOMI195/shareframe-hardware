@@ -3,7 +3,7 @@
 ################################################################################
 
 TRYBOOT_REBOOT_VERSION = 1.0
-TRYBOOT_REBOOT_SITE = $(TOPDIR)/../../package/tryboot-reboot/src
+TRYBOOT_REBOOT_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/package/tryboot-reboot/src
 TRYBOOT_REBOOT_SITE_METHOD = local
 
 define TRYBOOT_REBOOT_BUILD_CMDS

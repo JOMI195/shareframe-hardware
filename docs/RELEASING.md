@@ -8,7 +8,7 @@ tryboot — bei Fehlern automatischer Rollback.
 ## Voraussetzungen (einmalig)
 
 - **Dev-Keys** (für lokale Tests): `scripts/gen-dev-keys.sh`
-  → `package/shareframe-rauc/files/{ca.cert,cert,key}.pem` (gitignored)
+  → `br2-external/package/shareframe-rauc/files/{ca.cert,cert,key}.pem` (gitignored)
 - **Prod-Keys** (offline, niemals ins Repo): `scripts/gen-prod-keys.sh`
   → `~/.shareframe-release-keys/`. Danach einmalig den Trust-Anchor ins
   Prod-Profil kopieren:
@@ -33,7 +33,7 @@ tryboot — bei Fehlern automatischer Rollback.
 
 Zwei verschiedene Mechanismen — nicht verwechseln:
 
-| | `releases/<version>/pre.sh / post.sh` | `overlay/usr/share/shareframe/system-migrations/NNN-name.sh` |
+| | `releases/<version>/pre.sh / post.sh` | `br2-external/overlay/usr/share/shareframe/system-migrations/NNN-name.sh` |
 |---|---|---|
 | Läuft | genau einmal, mit diesem Update | bei jedem Versionswechsel |
 | System | **altes** System (vor Reboot) | **neues** System (erster Boot, vor App + Commit) |

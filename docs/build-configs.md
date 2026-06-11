@@ -1,8 +1,9 @@
 # Build configs (`configs/`)
 
 One config dir **per device**. Bundles everything that changes between
-deployments in a single place, kept separate from the tracked `overlay/` so
-private files never land in the repo overlay or leak between builds.
+deployments in a single place, kept separate from the tracked
+`br2-external/overlay/` so private files never land in the repo overlay or leak
+between builds.
 
 ## Workflow
 

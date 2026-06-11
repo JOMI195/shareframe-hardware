@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Generate RAUC dev signing CA + leaf cert + key. Run once; files are gitignored.
 # Drops:
-#   package/shareframe-rauc/files/ca.cert.pem
-#   package/shareframe-rauc/files/cert.pem
-#   package/shareframe-rauc/files/key.pem
+#   br2-external/package/shareframe-rauc/files/ca.cert.pem
+#   br2-external/package/shareframe-rauc/files/cert.pem
+#   br2-external/package/shareframe-rauc/files/key.pem
 # The CA cert becomes /etc/rauc/ca.cert.pem on the target (trust anchor).
 # cert.pem + key.pem stay host-side; used by scripts/make-bundle.sh.
 set -euo pipefail
 
-OUT=package/shareframe-rauc/files
+OUT=br2-external/package/shareframe-rauc/files
 mkdir -p "${OUT}"
 
 if [ -f "${OUT}/ca.cert.pem" ] && [ -f "${OUT}/cert.pem" ] && [ -f "${OUT}/key.pem" ]; then

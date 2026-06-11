@@ -2,7 +2,7 @@
 # Host tests for the RAUC tryboot backend (fixture dirs, no real mounts).
 set -euo pipefail
 
-BACKEND="$(cd "$(dirname "$0")/.." && pwd)/package/shareframe-rauc/files/tryboot-backend"
+BACKEND="$(cd "$(dirname "$0")/.." && pwd)/br2-external/package/shareframe-rauc/files/tryboot-backend"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 

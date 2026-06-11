@@ -14,7 +14,7 @@
 ################################################################################
 
 SHAREFRAME_DASHBOARD_FRONTEND_VERSION = 1.0.0
-SHAREFRAME_DASHBOARD_FRONTEND_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/../shareframe-board/dashboard-frontend
+SHAREFRAME_DASHBOARD_FRONTEND_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/../../shareframe-board/dashboard-frontend
 SHAREFRAME_DASHBOARD_FRONTEND_SITE_METHOD = local
 SHAREFRAME_DASHBOARD_FRONTEND_LICENSE = ISC
 
