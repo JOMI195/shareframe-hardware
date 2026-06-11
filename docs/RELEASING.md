@@ -49,7 +49,15 @@ migrierte /data. Nur additiv ändern, nichts löschen/umschreiben.
 ### 3. Bauen
 
 ```sh
-./automation.sh build configs/prod-local     # Image + Artefakte
+./automation.sh build configs/prod-local         # Image + Artefakte
+./automation.sh release prod --criticality Minor # signiert mit ~/.shareframe-release-keys
+```
+
+`release prod` ist nur ein Wrapper um `scripts/make-release.sh` und verdrahtet
+die Offline-Keys automatisch (Keydir per `SHAREFRAME_RELEASE_KEYDIR` änderbar).
+Explizit entspricht das:
+
+```sh
 SHAREFRAME_RELEASE_CERT=~/.shareframe-release-keys/cert.pem \
 SHAREFRAME_RELEASE_KEY=~/.shareframe-release-keys/key.pem \
 scripts/make-release.sh --mode prod --criticality Minor
@@ -93,14 +101,18 @@ Schlägt der Boot der neuen Version fehl, rollt das Board automatisch zurück �
 sichtbar als „Zurückgerollt" im Update-Verlauf. Das Release dann am Server
 deaktivieren (`is_active` aus) und Ursache fixen.
 
-## Dev-Loop (ohne Server)
+## Dev-Releases
+
+Gleicher Ablauf wie Prod, nur ohne Key-Umgebungsvariablen:
 
 ```sh
-./automation.sh build          # baut + dev-signiertes Bundle
-./automation.sh deploy         # scp über usb0 → rauc install → tryboot-Reboot
+./automation.sh build         # Image bauen
+./automation.sh release dev   # Update-Dateien erzeugen (dev-signiert)
 ```
 
-Identischer Update-Pfad wie in Produktion, nur dev-signiert.
+Update-Dateien liegen danach in `artifacts/release/<version>/` und gehen wie
+bei Prod über den Server an Dev-Boards (dev-signiert; Prod-Boards lehnen sie
+ab).
 
 ## Worauf achten
 

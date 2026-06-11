@@ -188,17 +188,6 @@ function buildroot() {
         echo "WARN: sdcard.img nicht gefunden — post-image.sh oder genimage failed?"
     fi
 
-    # --- artifacts/release/ : RAUC update bundle (signed) + .sha256. Dev keys via
-    # scripts/gen-dev-keys.sh (run once). Bundle is what the C++ app fetches
-    # from the server and passes to `rauc install`.
-    if [ -f package/shareframe-rauc/files/cert.pem ] && [ -f package/shareframe-rauc/files/key.pem ]; then
-        if ! ./scripts/make-release.sh --mode dev; then
-            echo "WARN: make-release.sh failed"
-        fi
-    else
-        echo "INFO: dev keys missing — skipping RAUC bundle build. Run scripts/gen-dev-keys.sh first."
-    fi
-
     echo "=== Auswertung ==="
     file "$(realpath artifacts/deploy/zImage)"
     [ -f artifacts/deploy/rootfs.squashfs ] && file "$(realpath artifacts/deploy/rootfs.squashfs)"
@@ -318,21 +307,6 @@ function build() {
   buildroot "$config_dir"
 }
 
-function deploy() {
-    # Dev-Loop: neuestes Bundle per usb0-SSH aufs Board, rauc install,
-    # tryboot-Reboot in den neuen Slot. Identischer Pfad wie Prod-Updates.
-    echo "=== Installiere Update-Bundle auf dem Board (usb0/SSH) ==="
-
-    local board="${BOARD:-root@10.55.0.2}"
-    local bundle
-    bundle="$(ls -t artifacts/release/*/shareframe-*.raucb 2>/dev/null | head -1)"
-    [ -n "$bundle" ] || { echo "deploy: kein Bundle in artifacts/release/<version>/ — erst bauen" >&2; return 1; }
-
-    ssh "$board" "mkdir -p /data/cache"
-    scp "$bundle" "$board:/data/cache/$(basename "$bundle")"
-    ssh "$board" "rauc install /data/cache/$(basename "$bundle") && touch /run/tryboot && reboot"
-}
-
 function restart() {
     echo "=== Power-Cycle des Pi Zero über den 4B (uhubctl) ==="
     ssh "$PI4B" "reset-zero"
@@ -341,6 +315,39 @@ function restart() {
 function connect_serial() {
     echo "=== Verbinde zur Zero-Serial-Konsole über den 4B ==="
     ssh -t "$PI4B" "picocom -b 115200 $PI4B_SERIAL"
+}
+
+function release() {
+    # Signiertes RAUC-Bundle aus den AKTUELLEN Build-Artefakten erzeugen
+    # (Wrapper um scripts/make-release.sh). Vorher `./automation.sh build [configs/...]`
+    # — der Image-Trust-Anchor muss zum Modus passen (Dev-Board nimmt nur
+    # dev-signiert, Prod nur prod-signiert). Prod verdrahtet die Offline-Keys
+    # aus ~/.shareframe-release-keys automatisch.
+    # usage: ./automation.sh release <dev|prod> [--version X] [--criticality C] [--notes FILE]
+    local mode="${1:-dev}"; shift || true
+    [ -f buildroot/src/output/images/rootfs.squashfs ] || {
+        echo "release: kein Build gefunden — zuerst ./automation.sh build [configs/...]" >&2; return 1; }
+    case "$mode" in
+        dev)
+            echo "=== Release (dev) ==="
+            scripts/make-release.sh --mode dev "$@"
+            ;;
+        prod)
+            echo "=== Release (prod) ==="
+            local keydir="${SHAREFRAME_RELEASE_KEYDIR:-$HOME/.shareframe-release-keys}"
+            : "${SHAREFRAME_RELEASE_CERT:=$keydir/cert.pem}"
+            : "${SHAREFRAME_RELEASE_KEY:=$keydir/key.pem}"
+            [ -f "$SHAREFRAME_RELEASE_CERT" ] && [ -f "$SHAREFRAME_RELEASE_KEY" ] || {
+                echo "release: Prod-Keys fehlen in $keydir (scripts/gen-prod-keys.sh)" >&2; return 1; }
+            SHAREFRAME_RELEASE_CERT="$SHAREFRAME_RELEASE_CERT" \
+            SHAREFRAME_RELEASE_KEY="$SHAREFRAME_RELEASE_KEY" \
+            scripts/make-release.sh --mode prod "$@"
+            ;;
+        *)
+            echo "release: Modus muss dev oder prod sein (usage: ./automation.sh release <dev|prod> [--version X] [--criticality C] [--notes FILE])" >&2
+            return 1
+            ;;
+    esac
 }
 
 "${@:-build}"

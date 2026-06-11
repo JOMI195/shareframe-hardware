@@ -25,6 +25,9 @@ booted=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline)
 		for svc in shareframe-display shareframe-dashboard shareframe-update; do
 			s6-svstat -o up "$SCANDIR/$svc" 2>/dev/null | grep -q true || ok=0
 		done
+		# restore any per-device /data file this release dropped; a required
+		# one missing AND unrestorable keeps the gate shut -> rollback
+		[ "$ok" = 1 ] && { shareframe-update-verify restore >/dev/null 2>&1 || ok=0; }
 		if [ "$ok" = 1 ]; then
 			if rauc status mark-good >/dev/null 2>&1; then
 				echo "rauc-mark-good: slot $booted committed"

@@ -9,6 +9,7 @@ IFACE=wlan0
 AP_IP=192.168.4.1/24
 SVC=/run/service
 FLAG=/run/shareframe/ap-enabled
+AP_CONF=/data/wifi/ap.conf
 
 log() { echo "shareframe-ap: $*" > /dev/console; }
 
@@ -53,9 +54,48 @@ ap_status() {
 	fi
 }
 
+# Persist a new AP password to /data/wifi/ap.conf (dashboard "AP-Passwort
+# ändern"). Keeps the SSID; survives reboots and A/B updates because
+# seed-ap-config never overwrites an existing file.
+ap_setpass() {
+	pass="$1"
+	len="$(printf '%s' "$pass" | wc -c)"
+	if [ "$len" -lt 8 ] || [ "$len" -gt 63 ]; then
+		echo "setpass: password must be 8-63 bytes" >&2
+		exit 1
+	fi
+
+	AP_SSID=shareframe-board
+	AP_PASS=
+	[ -f "$AP_CONF" ] && . "$AP_CONF"
+
+	# The file is shell-sourced (hostapd run script, wifi-mode-manager):
+	# single-quote the values, escaping embedded ' as '\''.
+	q_ssid="$(printf '%s' "$AP_SSID" | sed "s/'/'\\\\''/g")"
+	q_pass="$(printf '%s' "$pass"    | sed "s/'/'\\\\''/g")"
+
+	mkdir -p "$(dirname "$AP_CONF")"
+	tmp="${AP_CONF}.tmp"
+	{
+		echo "AP_SSID='${q_ssid}'"
+		echo "AP_PASS='${q_pass}'"
+	} > "$tmp"
+	chmod 0600 "$tmp"
+	mv "$tmp" "$AP_CONF"
+	log "AP password updated"
+
+	# Live AP: restart hostapd so it re-renders its config with the new
+	# passphrase. Deferred (and detached from the caller's pipes) so the
+	# dashboard's HTTP response reaches the AP client before it gets kicked.
+	if [ -e "$FLAG" ]; then
+		( sleep 2; s6-svc -r "$SVC/hostapd" 2>/dev/null || true ) >/dev/null 2>&1 &
+	fi
+}
+
 case "${1:-}" in
-	up)     ap_up ;;
-	down)   ap_down ;;
-	status) ap_status ;;
-	*) echo "usage: shareframe-ap {up|down|status}" >&2; exit 1 ;;
+	up)      ap_up ;;
+	down)    ap_down ;;
+	status)  ap_status ;;
+	setpass) ap_setpass "${2:-}" ;;
+	*) echo "usage: shareframe-ap {up|down|status|setpass <password>}" >&2; exit 1 ;;
 esac

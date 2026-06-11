@@ -71,6 +71,8 @@ set -e
 case "$1" in
 	install-check)
 		# RAUC already enforced manifest<->system compatible. Extra checks below.
+		# back up per-device /data files before the slot is written (old system)
+		command -v shareframe-update-verify >/dev/null 2>&1 && shareframe-update-verify backup || true
 HOOK
 	if [ -f "${REL_DIR}/pre.sh" ]; then
 		echo "		# --- releases/${VERSION}/pre.sh ---"

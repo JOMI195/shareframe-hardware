@@ -170,6 +170,9 @@ ap_wait_then_retry() {
 	while :; do
 		sleep "$AP_POLL"
 		elapsed=$((elapsed + AP_POLL))
+		# Re-publish each tick: the AP credentials can change underneath us
+		# (dashboard AP-password change) and the json must follow.
+		write_mode ap
 		if [ -f "$RETRY_FLAG" ]; then
 			rm -f "$RETRY_FLAG"
 			log "retry requested by dashboard"

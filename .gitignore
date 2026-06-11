@@ -85,3 +85,6 @@ package/shareframe-rauc/files/*.srl
 configs/*
 !configs/example/
 !configs/example/**
+
+# Created releases
+releases/
