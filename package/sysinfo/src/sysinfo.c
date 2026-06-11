@@ -3,9 +3,10 @@
  *
  * A board-agnostic *renderer*: it runs the shareframe-sysinfo overlay script
  * (the single source of board-specific reads) and parses its `key=value`
- * output, then prints a full-width logo banner across the whole row followed by
- * a column of formatted system-info rows. Missing keys are simply skipped, so a
- * metric whose source is absent just drops out of the display.
+ * output, then prints a column of formatted system-info rows; -b/--banner
+ * additionally prints the full-width logo first (used by the login profile).
+ * Missing keys are simply skipped, so a metric whose source is absent just
+ * drops out of the display.
  */
 #define _DEFAULT_SOURCE
 
@@ -169,12 +170,17 @@ static void disk_row(const char *label, const char *total_key, const char *free_
 	row(label, buf);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+	/* logo is opt-in (-b): login profile passes it, manual runs stay compact */
+	int show_banner = argc > 1 &&
+	    (strcmp(argv[1], "-b") == 0 || strcmp(argv[1], "--banner") == 0);
+
 	init_colors();
 	ingest();
 
-	banner();
+	if (show_banner)
+		banner();
 
 	/* title: <user>@<host>, fastfetch-style, underlined */
 	const char *user = getenv("USER");
@@ -199,7 +205,28 @@ int main(void)
 	char buf[96];
 
 	row("OS", val("os_pretty_name"));
+	row("Host", val("host_model"));
 	row("Kernel", val("kernel"));
+
+	const char *fw = val("fw_version");
+	const char *sha = val("build_sha");
+	if (fw && *fw) {
+		if (sha && *sha)
+			snprintf(buf, sizeof buf, "%s (%.7s)", fw, sha);
+		else
+			snprintf(buf, sizeof buf, "%s", fw);
+		row("Firmware", buf);
+	}
+
+	const char *slot = val("boot_slot");
+	if (slot && *slot) {
+		const char *trial = val("slot_trial");
+		snprintf(buf, sizeof buf, "%s%s", slot,
+		         trial && strcmp(trial, "true") == 0 ? " (trial)" : "");
+		row("Slot", buf);
+	}
+
+	row("Serial", val("serial"));
 
 	uint64_t up;
 	if (get_u64("uptime_seconds", &up)) {
@@ -208,9 +235,16 @@ int main(void)
 	}
 
 	row("Boots", val("boot_count"));
+	row("Time", val("time_iso"));
+	row("Health", val("health_state"));
 
 	if (val("cpu_usage_percent")) {
-		snprintf(buf, sizeof buf, "%s %%", val("cpu_usage_percent"));
+		const char *mhz = val("cpu_freq_mhz");
+		if (mhz && *mhz)
+			snprintf(buf, sizeof buf, "%s %% @ %s MHz",
+			         val("cpu_usage_percent"), mhz);
+		else
+			snprintf(buf, sizeof buf, "%s %%", val("cpu_usage_percent"));
 		row("CPU", buf);
 	}
 
@@ -240,19 +274,27 @@ int main(void)
 	disk_row("Root", "storage_root_total_bytes", "storage_root_free_bytes");
 	disk_row("Data", "storage_data_total_bytes", "storage_data_free_bytes");
 
-	/* WLAN: ip, signal, link state — show whatever is present */
+	/* WLAN: ssid (AP-prefixed in fallback mode), ip, signal, link state —
+	 * show whatever is present; signal/link are meaningless for our own AP. */
+	const char *mode = val("wifi_mode");
+	const char *ssid = val("wifi_ssid");
 	const char *ipw = val("ip_wlan0");
 	const char *sig = val("wlan_signal_dbm");
 	const char *conn = val("wlan_connected");
-	if (ipw || sig || conn) {
+	int ap = mode && strcmp(mode, "ap") == 0;
+	if ((ssid && *ssid) || ipw || sig || conn) {
 		char w[96];
 		size_t off = 0;
-		if (ipw)
-			off += (size_t)snprintf(w + off, sizeof w - off, "%s", ipw);
-		if (sig)
+		if (ssid && *ssid)
+			off += (size_t)snprintf(w + off, sizeof w - off,
+			                        "%s%s", ap ? "AP " : "", ssid);
+		if (ipw && off < sizeof w)
+			off += (size_t)snprintf(w + off, sizeof w - off,
+			                        "%s%s", off ? "  " : "", ipw);
+		if (sig && !ap && off < sizeof w)
 			off += (size_t)snprintf(w + off, sizeof w - off,
 			                        "%s%s dBm", off ? "  " : "", sig);
-		if (conn && off < sizeof w)
+		if (conn && !ap && off < sizeof w)
 			snprintf(w + off, sizeof w - off, "%s%s",
 			         off ? "  " : "",
 			         strcmp(conn, "true") == 0 ? "up" : "down");

@@ -21,6 +21,23 @@ emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 # shellcheck disable=SC1091  # /etc/os-release is generated at build time
 [ -r /etc/os-release ] && ( . /etc/os-release; emit os_pretty_name "${PRETTY_NAME:-}" )
 
+# --- firmware release (written by post-build.sh) ---
+if [ -r /etc/shareframe-release ]; then
+	emit fw_version "$(sed -n 's/^VERSION=//p' /etc/shareframe-release)"
+	emit build_sha "$(sed -n 's/^BUILD_SHA=//p' /etc/shareframe-release)"
+fi
+
+# --- booted A/B slot (cmdline) + trial flag (staged, uncommitted tryboot) ---
+slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
+if [ -n "$slot" ]; then
+	emit boot_slot "$slot"
+	[ "$(cat /data/rauc/pending 2>/dev/null)" = "$slot" ] && emit slot_trial true
+fi
+
+# --- hardware identity ---
+[ -r /proc/device-tree/model ] && emit host_model "$(tr -d '\0' < /proc/device-tree/model)"
+[ -r /proc/cpuinfo ] && emit serial "$(awk '/^Serial/{ print $3; exit }' /proc/cpuinfo)"
+
 # --- uptime (seconds) ---
 [ -r /proc/uptime ] && emit uptime_seconds "$(awk '{printf "%d", $1}' /proc/uptime)"
 
@@ -31,16 +48,17 @@ emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 [ -r /run/shareframe/health ] && emit health_state "$(cat /run/shareframe/health 2>/dev/null)"
 
 # --- memory (bytes) ---
+# %.0f everywhere bytes are printed: busybox awk %d clamps to 32-bit on ARM.
 [ -r /proc/meminfo ] && awk '
-	/^MemTotal:/     { printf "ram_total_bytes=%d\n",     $2 * 1024 }
-	/^MemAvailable:/ { printf "ram_available_bytes=%d\n", $2 * 1024 }
+	/^MemTotal:/     { printf "ram_total_bytes=%.0f\n",     $2 * 1024 }
+	/^MemAvailable:/ { printf "ram_available_bytes=%.0f\n", $2 * 1024 }
 ' /proc/meminfo
 
 # --- storage (bytes) for /data (writable) and / (rootfs) ---
 storage() {  # $1=mountpoint  $2=key prefix
 	df -k "$1" 2>/dev/null | awk -v p="$2" 'NR==2 {
-		printf "%s_total_bytes=%d\n", p, $2 * 1024
-		printf "%s_free_bytes=%d\n",  p, $4 * 1024
+		printf "%s_total_bytes=%.0f\n", p, $2 * 1024
+		printf "%s_free_bytes=%.0f\n",  p, $4 * 1024
 	}'
 }
 storage /data storage_data
@@ -49,6 +67,10 @@ storage /     storage_root
 # --- CPU temperature (°C); thermal zone may be absent on this kernel ---
 TZ_TEMP=/sys/class/thermal/thermal_zone0/temp
 [ -r "$TZ_TEMP" ] && awk '{ printf "cpu_temp_celsius=%.1f\n", $1 / 1000 }' "$TZ_TEMP"
+
+# --- CPU frequency (MHz); cpufreq may be absent on this kernel ---
+CUR_FREQ=/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
+[ -r "$CUR_FREQ" ] && awk '{ printf "cpu_freq_mhz=%d\n", $1 / 1000 }' "$CUR_FREQ"
 
 # --- load average ---
 if [ -r /proc/loadavg ]; then
@@ -77,6 +99,21 @@ ipv4() {  # $1=iface  $2=key
 }
 ipv4 "$IFACE" ip_wlan0
 ipv4 usb0     ip_usb0
+
+# --- WLAN mode + SSID (published by wifi-mode-manager) ---
+# wifi-mode.json also holds ap_password — only ever read mode/ssid/ap_ssid.
+WMODE_FILE=/run/shareframe/wifi-mode
+WJSON=/run/shareframe/wifi-mode.json
+if [ -r "$WMODE_FILE" ]; then
+	wmode=$(cat "$WMODE_FILE")
+	emit wifi_mode "$wmode"
+	# [{,] anchor: plain "ssid" must not match inside "ap_ssid".
+	jget() { sed -n "s/.*[{,]\"$1\":\"\([^\"]*\)\".*/\1/p" "$WJSON" 2>/dev/null; }
+	case "$wmode" in
+		ap) emit wifi_ssid "$(jget ap_ssid)" ;;
+		*)  emit wifi_ssid "$(jget ssid)" ;;
+	esac
+fi
 
 # --- WLAN signal (dBm) + link state ---
 [ -r /proc/net/wireless ] && awk -v ifc="$IFACE" '
