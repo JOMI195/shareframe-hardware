@@ -93,7 +93,8 @@ HOOK
 				trap 'umount "${mnt}" 2>/dev/null || true' EXIT
 				rm -rf "${mnt}/${bn}.new"
 				mkdir -p "${mnt}/${bn}.new"
-				tar -xf "${RAUC_BUNDLE_MOUNT_POINT}/${RAUC_IMAGE_NAME}" -C "${mnt}/${bn}.new"
+				# RAUC_IMAGE_NAME is the absolute path inside the mounted bundle
+				tar -xf "${RAUC_IMAGE_NAME}" -C "${mnt}/${bn}.new"
 				sed -i "s/rauc\.slot=[A-Z@SLOT]*/rauc.slot=${bn}/" "${mnt}/${bn}.new/cmdline.txt"
 				rm -rf "${mnt}/${bn}"
 				mv "${mnt}/${bn}.new" "${mnt}/${bn}"
