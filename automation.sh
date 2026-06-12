@@ -159,6 +159,8 @@ function buildroot() {
     # the active overlay (or the tracked .template) re-creates them.
     rm -f "$src_dir/output/target/usr/share/shareframe/.env.secrets.toml.default" \
           "$src_dir/output/target/usr/share/shareframe/wpa_supplicant.conf.default"
+    # Drop stale config overlays — profile name may differ from previous build.
+    rm -f "$src_dir/output/target/etc/shareframe/config.*.toml"
 
     make -C "$src_dir" -j"$(nproc)"
 
