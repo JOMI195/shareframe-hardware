@@ -1,4 +1,4 @@
-From: Shareframe <johannes-middelberg@gmx.de>
+From: Shareframe <johannes.middelberg@gmx.de>
 Subject: [PATCH] watchdog: bcm2835_wdt: set reboot partition in PM_RSTS
 
 Port of the downstream restart handler: parse the leading partition

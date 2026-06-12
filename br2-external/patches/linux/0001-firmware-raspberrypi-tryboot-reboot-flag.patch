@@ -1,4 +1,4 @@
-From: Shareframe <johannes-middelberg@gmx.de>
+From: Shareframe <johannes.middelberg@gmx.de>
 Subject: [PATCH] firmware: raspberrypi: set tryboot reboot flag via mailbox
 
 Port of the downstream (raspberrypi/linux) reboot notifier: a reboot
