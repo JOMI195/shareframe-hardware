@@ -1,13 +1,8 @@
 #!/bin/sh
-# wifi-mode-manager — single owner of wlan0. Runs it as a station
-# (wpa_supplicant + dhcpcd-wlan) and, when no known network can be joined within
-# a grace window, falls back to hosting the shareframe-board access point
-# (hostapd + dnsmasq-ap) so the user can enter new wifi from the dashboard.
-# brcmfmac cannot do AP + station at once, so the two modes are mutually
-# exclusive and this daemon is the only thing that flips between them.
-#
-# Publishes the current mode to /run/shareframe/wifi-mode{,.json} for the
-# dashboard backend. Replaces wifi-reachability-watch (it owns monitoring too).
+# Single owner of wlan0: runs it as a station and, when no known network joins
+# within a grace window, falls back to hosting the setup access point so the user
+# can enter wifi from the dashboard. The two modes are mutually exclusive (the
+# chip can't do both). Publishes the current mode for the dashboard backend.
 set -u
 
 IFACE=wlan0
@@ -30,8 +25,7 @@ WEDGE_MAX=20            # connected: cap on the wedged-link backoff threshold
 
 log() { echo "wifi-mode-manager: $*" > /dev/console; }
 
-# Write-on-change only: a periodic unconditional write would stomp the error/
-# updating codes that shareframe-health and the app assert on top of ours.
+# Write-on-change only: avoid stomping codes others assert on top of ours.
 LED_STATE=
 set_led() {
 	[ "$1" = "$LED_STATE" ] && return 0
@@ -70,8 +64,7 @@ EOF
 
 enter_connecting() {
 	log "mode -> connecting"
-	# We want the station back: let wpa_supplicant's finish-script self-heal
-	# (wifi-stack-restart) work again.
+	# Want the station back: let the finish-script self-heal again.
 	rm -f "$SWITCH_FLAG"
 	shareframe-ap down 2>/dev/null || true
 	s6-svc -u "$SVC/wpa_supplicant" 2>/dev/null || true
@@ -80,11 +73,9 @@ enter_connecting() {
 	write_mode connecting
 }
 
-# Decide station vs AP. AP fallback keys on *association* only (the true
-# "network gone" signal): if we can't associate within ASSOC_TIMEOUT, go AP.
-# Once associated we treat it as connected even if DHCP is still pending, so a
-# slow-but-valid network never triggers a false AP fallback. 0 = connected,
-# 1 = could not associate (-> AP).
+# Station vs AP: fall back to AP only when association fails within the timeout.
+# Once associated, treat as connected even if DHCP is pending (no false fallback).
+# Returns 0 = connected, 1 = could not associate.
 wait_for_sta() {
 	i=0
 	while [ "$i" -lt "$ASSOC_TIMEOUT" ]; do
@@ -111,8 +102,7 @@ enter_connected() {
 
 enter_ap() {
 	log "mode -> ap (no known wifi joined)"
-	# Stop the station services and pin them down: this flag makes their
-	# finish-script (wifi-stack-restart) a no-op so they don't fight the switch.
+	# Stop + pin down the station services so they don't fight the switch.
 	: > "$SWITCH_FLAG"
 	s6-svc -d "$SVC/dhcpcd-wlan"    2>/dev/null || true
 	s6-svc -d "$SVC/wpa_supplicant" 2>/dev/null || true
@@ -121,11 +111,9 @@ enter_ap() {
 	write_mode ap
 }
 
-# Stay connected; monitor association + reachability. Returns when association
-# is lost (caller re-evaluates, possibly falling back to AP). While associated
-# but unreachable it re-associates the stack (wedged-link recovery, with backoff
-# so a genuinely down WAN doesn't flap the link) — the job wifi-reachability-watch
-# used to do.
+# Stay connected; watch association + reachability. Returns when association is
+# lost. While associated but unreachable, re-associate with backoff (wedged-link
+# recovery; backoff so a genuinely down WAN doesn't flap the link).
 monitor_connected() {
 	drops=0
 	wedge=0
@@ -162,16 +150,14 @@ monitor_connected() {
 	done
 }
 
-# Hold the AP; return when it's time to retry the station (dashboard request,
-# or the periodic retry while no client is mid-config).
+# Hold the AP; return when it's time to retry the station.
 ap_wait_then_retry() {
 	rm -f "$RETRY_FLAG"
 	elapsed=0
 	while :; do
 		sleep "$AP_POLL"
 		elapsed=$((elapsed + AP_POLL))
-		# Re-publish each tick: the AP credentials can change underneath us
-		# (dashboard AP-password change) and the json must follow.
+		# Re-publish each tick: AP credentials can change underneath us.
 		write_mode ap
 		if [ -f "$RETRY_FLAG" ]; then
 			rm -f "$RETRY_FLAG"
@@ -188,7 +174,7 @@ ap_wait_then_retry() {
 	done
 }
 
-# ---- state machine ----
+# State machine
 mkdir -p "$STATE_DIR"
 while :; do
 	enter_connecting

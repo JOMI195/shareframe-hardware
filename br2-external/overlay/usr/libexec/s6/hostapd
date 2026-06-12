@@ -1,14 +1,8 @@
 #!/bin/sh
-# hostapd for the wlan0 AP fallback. Supervised by s6 but IDLE until
-# wifi-mode-manager (via shareframe-ap) requests AP mode by creating
-# /run/shareframe/ap-enabled. This self-gating avoids relying on an s6-rc
-# `down` file (s6-rc 0.5.5.0 longruns don't honour one) and guarantees hostapd
-# never grabs wlan0 until the station services have been stopped.
-#
-# Renders /run/shareframe/hostapd.conf from the per-device credentials in
-# /data/wifi/ap.conf, then execs hostapd in the foreground. On AP teardown the
-# manager removes the flag and `s6-svc -r`s this service, dropping us back into
-# the wait loop.
+# hostapd for the wlan0 AP fallback. Supervised but IDLE until the mode-manager
+# creates the ap-enabled flag (self-gating, since s6-rc longruns ignore a `down`
+# file) so it never grabs wlan0 before the station services stop. Renders its
+# conf from the per-device credentials, then execs hostapd.
 set -u
 AP_CONF=/data/wifi/ap.conf
 RUN_CONF=/run/shareframe/hostapd.conf

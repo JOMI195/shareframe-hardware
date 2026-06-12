@@ -1,19 +1,15 @@
 #!/bin/sh
-# SSDP announce for router portals (Fritz!Box) and Windows network view.
-# ssdpd hardcodes deviceType InternetGatewayDevice, which routers ignore for
-# the "device webpage" link — so serve our own Basic:1 description.xml via
-# nginx (-d) and disable ssdpd's built-in server (-w).
+# SSDP announce for router portals and Windows network view. Serve our own
+# Basic:1 description.xml (routers ignore ssdpd's hardcoded gateway type).
 set -e
 
 mkdir -p /data/ssdpd /run/shareframe/ssdp
 
-# UUID cache on /data: /var is tmpfs, a fresh UUID per boot would duplicate
-# the device entry in router UIs. Seed it ourselves so the XML below can use it.
+# UUID cache on /data so the device isn't duplicated in router UIs each boot.
 CACHE=/data/ssdpd/ssdpd.cache
 [ -s "$CACHE" ] || echo "uuid:$(cat /proc/sys/kernel/random/uuid)" > "$CACHE"
 
-# presentationURL is relative: resolved against the LOCATION base, so it
-# always points at the dashboard regardless of which interface/IP served it.
+# Relative presentationURL: resolves to the dashboard whatever IP served it.
 cat > /run/shareframe/ssdp/description.xml <<XML
 <?xml version="1.0"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">

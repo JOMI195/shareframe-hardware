@@ -1,7 +1,6 @@
 #!/bin/sh
-# Load the Broadcom wifi driver. brcmfmac sometimes comes up dirty on cold
-# boot (firmware load race, SDIO glitch) — retry with rmmod + rfkill unblock
-# before giving up. On boards without brcm wifi this still succeeds silently.
+# Load the Broadcom wifi driver; retry with rmmod + rfkill unblock if it comes
+# up dirty on cold boot. Succeeds silently on boards without brcm wifi.
 
 WAIT_S=5
 
@@ -15,8 +14,7 @@ wait_wlan0() {
 	return 1
 }
 
-# rfkill may have been left "soft blocked" by a previous run. Unblock first so
-# the modprobe attempts aren't sabotaged.
+# Unblock rfkill first (may be soft-blocked from a previous run).
 for sb in /sys/class/rfkill/rfkill*/soft; do
 	[ -e "$sb" ] && echo 0 > "$sb" 2>/dev/null || true
 done

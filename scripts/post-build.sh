@@ -1,27 +1,25 @@
 #!/bin/bash
-# Post-build: Build-Metadaten ins Rootfs schreiben
+# Post-build: write build metadata into the rootfs
 set -e
 
-TARGET_DIR="$1"   # von Buildroot gesetzt: Pfad zum Staging-Rootfs
+TARGET_DIR="$1"   # set by Buildroot: staging rootfs path
 
-echo "=== Post-build: Build-Stempel erzeugen ==="
+echo "=== Post-build: write build stamp ==="
 
 {
     echo "built_at=$(date --iso-8601=seconds)"
     echo "built_by=$(whoami)@$(hostname)"
     echo "git_commit=${BUILD_SHA:-unknown}"
-    # config_label: aus configs/<kunde>/config.env (SHAREFRAME_CONFIG_LABEL),
-    # leer beim arglosen Build. Zeigt am Image, mit welcher Config gebaut wurde.
+    # config_label: from the config dir's config.env; empty for an argless build.
     echo "config_label=${SHAREFRAME_CONFIG_LABEL:-}"
 } > "$TARGET_DIR/etc/build-info"
 
-echo "=== Post-build: /etc/build-info geschrieben ==="
+echo "=== Post-build: wrote /etc/build-info ==="
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# /etc/shareframe-release: single version source for the app, the RAUC bundle
-# manifest and the server compare. SHAREFRAME_VERSION (set by automation.sh
-# build --version) wins, else the git sha.
+# Single version source for the app, RAUC manifest and server compare; the
+# explicit version wins, else the git sha.
 VERSION="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
 {
     echo "VERSION=${VERSION}"
@@ -38,36 +36,30 @@ if [ -n "$BUILD_SHA" ]; then
     {
         echo "BUILD_ID=$BUILD_SHA"
     } >> "$TARGET_DIR/etc/os-release"
-    echo "=== Post-build: BUILD_ID in /etc/os-release ergaenzt ==="
+    echo "=== Post-build: added BUILD_ID to /etc/os-release ==="
 fi
 
-# Fake-hwclock seed: virgin SDs without /data/fake-hwclock start at build time
-# instead of the 1970 epoch (TLS, log timestamps).
+# Fake-hwclock seed: virgin SDs start at build time, not the 1970 epoch.
 date +%s > "$TARGET_DIR/etc/fake-hwclock-default"
-echo "=== Post-build: /etc/fake-hwclock-default mit Build-Epoch geschrieben ==="
+echo "=== Post-build: wrote /etc/fake-hwclock-default ==="
 
-# SHAREFRAME_BUILD_MODE: dev | prod image flavor. Currently only post-image.sh
-# acts on it (uart_2ndstage=1 in dev); the file is informational for now.
+# Build flavor; only post-image.sh acts on it (verbose UART in dev).
 MODE="${SHAREFRAME_BUILD_MODE:-prod}"
 echo "${MODE}" > "$TARGET_DIR/etc/shareframe-build-mode"
 echo "=== Post-build: /etc/shareframe-build-mode=${MODE} ==="
 
-# SHAREFRAME_PROFILE: dev | prod | prod.local. The 60-app s6 run scripts read
-# this file and export it as SHAREFRAME_PROFILE, selecting the
-# /etc/shareframe/config.<profile>.toml overlay the app merges on config.toml.
+# Config profile; the app reads it and merges the matching config overlay.
 PROFILE="${SHAREFRAME_PROFILE:-prod}"
 echo "${PROFILE}" > "$TARGET_DIR/etc/shareframe-profile"
 echo "=== Post-build: /etc/shareframe-profile=${PROFILE} ==="
 
-# Compile the SPI DT overlay. Ships in each FAT boot slot (overlays/), applied
-# by the firmware via dtoverlay=spi0-spidev in the per-slot config.txt.
+# Compile the SPI DT overlay shipped in each boot slot.
 OVERLAY_SRC="${SCRIPT_DIR}/../br2-external/board/raspberrypi0w/overlays/spi0-spidev.dts"
 DTC="${HOST_DIR}/bin/dtc"
 if [ -x "${DTC}" ] && [ -f "${OVERLAY_SRC}" ]; then
     mkdir -p "${TARGET_DIR}/boot"
     "${DTC}" -@ -I dts -O dtb -o "${TARGET_DIR}/boot/spi0-spidev.dtbo" "${OVERLAY_SRC}"
-    # Also into BINARIES_DIR so post-image.sh stages it into FAT boot/A,B for
-    # the initial flash (RAUC takes over per-slot thereafter).
+    # Also stage into BINARIES_DIR for the initial flash (post-image.sh).
     [ -n "${BINARIES_DIR:-}" ] && cp "${TARGET_DIR}/boot/spi0-spidev.dtbo" "${BINARIES_DIR}/spi0-spidev.dtbo"
     echo "=== Post-build: spi0-spidev.dtbo compiled into /boot ==="
 fi

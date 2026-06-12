@@ -1,29 +1,11 @@
 #!/bin/sh
-# shareframe-health — lightweight environmental health daemon. Watches the few
-# failure modes nothing else on the board reports, and surfaces them three ways:
-# a persisted log on /data (survives reboot), the console/syslog, and a
-# dashboard-readable JSON under /run (mirrors wifi-mode-manager's wifi-mode.json).
-#
-# Deliberately NARROW. It does not police memory or processes — that division of
-# labour is intentional:
-#   * earlyoom owns out-of-memory: it kills the biggest hog before the kernel
-#     OOM-killer locks the board up. This daemon only *reports* OOM events.
-#   * s6 owns process supervision: it restarts crashed longruns. This daemon does
-#     not second-guess it (no crash-loop policing, no leak-trend guessing).
-#
-# Scope:
-#   oom    kernel OOM-kill or earlyoom kill events  -> report (latched)
-#   temp   CPU over-temp + under-voltage/throttle   -> report (no cpufreq control here)
-#   disk   low free space / inodes on /data         -> report
-#   + overall state -> critical LED + health.json
-#
-# LED is SHARED with wifi-mode-manager (it owns normal/wifi/ap). To avoid fighting
-# it, this daemon only ever asserts `shareframe-led error` on a CRITICAL fault and
-# never resets the LED. Probes are best-effort (no `set -e`): a missing source
-# must never take the daemon down.
+# Environmental health daemon: reports oom/temp/disk faults via a persisted log,
+# console/syslog, and health.json. Reports only (earlyoom owns OOM, s6 owns
+# process supervision). Asserts the critical LED on a CRITICAL fault but never
+# resets it (wifi-mode-manager owns the normal/wifi/ap codes). Probes best-effort.
 set -u
 
-# --- paths (overridable so the probes are unit-testable on the host) ----------
+# Paths (overridable for host unit tests)
 PROC="${PROC:-/proc}"
 THERMAL="${THERMAL:-/sys/class/thermal/thermal_zone0/temp}"
 STATE_DIR="${STATE_DIR:-/run/shareframe}"
@@ -31,19 +13,18 @@ DATA_DIR="${DATA_DIR:-/data/shareframe}"
 LOG_FILE="${LOG_FILE:-$DATA_DIR/health.log}"
 DMESG="${DMESG:-dmesg}"
 
-# --- tunables -----------------------------------------------------------------
+# Tunables
 INTERVAL="${INTERVAL:-30}"           # main loop cadence (seconds)
 TEMP_WARN_C="${TEMP_WARN_C:-80}"     # CPU °C -> warn above
 TEMP_CRIT_C="${TEMP_CRIT_C:-85}"     #          critical above
 DISK_WARN_PCT="${DISK_WARN_PCT:-10}" # free % -> warn below
 DISK_CRIT_PCT="${DISK_CRIT_PCT:-5}"  #          critical below
-# Only writable filesystems can "fill up". / is read-only squashfs/RAM-root here
-# (always ~100% used) — checking it would false-positive.
+# Only writable mounts can fill up; / is read-only (always ~100%).
 DISK_MOUNTS="${DISK_MOUNTS:-/data}"
 EVENT_HOLD="${EVENT_HOLD:-300}"      # keep a point-in-time event (oom/under-volt) latched this long
 LOG_MAX_LINES="${LOG_MAX_LINES:-2000}"
 
-# --- reporting ----------------------------------------------------------------
+# Reporting
 now() { date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null; }
 
 log() {  # persist + console + best-effort syslog
@@ -91,9 +72,8 @@ publish() {  # $1=overall — write the dashboard-facing surface
 
 now_uptime() { cut -d. -f1 "$PROC/uptime" 2>/dev/null || echo 0; }
 
-# Latch a transient event: once seen it reads `active` for EVENT_HOLD seconds, so
-# point-in-time failures (OOM kill, under-voltage) stay visible on the dashboard
-# and LED instead of vanishing on the next poll. $1=key $2=new-count.
+# Latch a transient event as active for EVENT_HOLD seconds so point-in-time
+# failures (OOM, under-voltage) stay visible. $1=key $2=new-count.
 hold_event() {
 	hf="$STATE_DIR/event.$1"; nowu=$(now_uptime)
 	[ "$2" -gt 0 ] && printf '%s\n' "$nowu" > "$hf"
@@ -101,21 +81,19 @@ hold_event() {
 	if [ "$last" -gt 0 ] && [ "$((nowu - last))" -lt "$EVENT_HOLD" ]; then echo active; else echo inactive; fi
 }
 
-# Count NEW kernel-ring matches since last poll (dedup via a stored count).
-# Handles ring rotation/clear (count drops) without false-firing.
+# Count new kernel-ring matches since last poll; tolerates ring clear.
 dmesg_new() {  # $1=marker-key  $2=egrep-pattern  -> echoes count of new matches
 	mk="$STATE_DIR/dmesg.$1"
-	# grep -c already prints 0 (and exits 1) when there are no matches.
+	# grep -c prints 0 (exit 1) when there are no matches.
 	cur=$($DMESG 2>/dev/null | grep -Eic "$2"); cur=${cur:-0}
 	prev=0; [ -f "$mk" ] && prev=$(cat "$mk" 2>/dev/null)
 	printf '%s\n' "$cur" > "$mk"
 	if [ "$cur" -lt "$prev" ]; then echo 0; else echo "$((cur - prev))"; fi
 }
 
-# --- probes (each echoes ok|warn|critical) ------------------------------------
+# Probes (each echoes ok|warn|critical)
 check_oom() {
-	# Two sources: the kernel OOM-killer (dmesg) and earlyoom's pre-OOM kills
-	# (earlyoom logs to syslog, not dmesg, so it reports via the notifier counter).
+	# Two sources: kernel OOM-killer (dmesg) + earlyoom kills (via notifier counter).
 	n=$(dmesg_new oom 'out of memory|oom-kill|killed process')
 	ek=0; [ -f "$STATE_DIR/oom-kills" ] && ek=$(cat "$STATE_DIR/oom-kills" 2>/dev/null)
 	pe=0; [ -f "$STATE_DIR/oom-kills.seen" ] && pe=$(cat "$STATE_DIR/oom-kills.seen" 2>/dev/null)
@@ -154,7 +132,7 @@ check_disk() {
 	note_change disk "$state" "$detail"; echo "$state"
 }
 
-# --- main loop ----------------------------------------------------------------
+# Main loop
 mkdir -p "$STATE_DIR" "$DATA_DIR"
 log "[health] daemon up (interval ${INTERVAL}s; oom/temp/disk)"
 while :; do
@@ -163,8 +141,7 @@ while :; do
 		overall=$(worse "$overall" "$s")
 	done
 	publish "$overall"
-	# Only remediation: claim the LED on a critical fault (never reset it —
-	# wifi-mode-manager owns the normal/wifi states).
+	# Only remediation: claim the LED on a critical fault (never reset it).
 	[ "$overall" = critical ] && shareframe-led error 2>/dev/null || true
 	rotate_log
 	sleep "$INTERVAL"

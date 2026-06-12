@@ -1,7 +1,6 @@
 #!/bin/sh
-# DHCP client (dhcpcd) for wlan0. Runs in foreground so s6 supervises it.
-# Waits for wpa_supplicant ctrl socket so initial DISCOVER fires only after
-# the supplicant is up; dhcpcd itself will then wait for IFF_LOWER_UP.
+# DHCP client for wlan0 (foreground for s6). Waits for the wpa_supplicant socket
+# so DISCOVER fires only after the supplicant is up.
 until [ -S /var/run/wpa_supplicant/wlan0 ]; do sleep 1; done
 
 exec dhcpcd --nobackground --config /etc/dhcpcd.conf wlan0

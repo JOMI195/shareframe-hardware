@@ -1,11 +1,7 @@
-################################################################################
-#
-# s6-linux-init-host  (nur Host: liefert s6-linux-init-maker beim Build)
-#
-################################################################################
+# s6-linux-init-host — host-only: provides s6-linux-init-maker at build time.
 
 S6_LINUX_INIT_HOST_VERSION = 1.1.2.1
-# Buildroot-Mirror statt skarnet.org (zuverlaessiger; selbe Tarball+Hash wie Target-Paket)
+# Buildroot mirror instead of skarnet.org (same tarball + hash as the target package).
 S6_LINUX_INIT_HOST_SITE = https://sources.buildroot.net/s6-linux-init
 S6_LINUX_INIT_HOST_SOURCE = s6-linux-init-$(S6_LINUX_INIT_HOST_VERSION).tar.gz
 S6_LINUX_INIT_HOST_LICENSE = ISC

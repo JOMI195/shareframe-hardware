@@ -1,116 +1,99 @@
-# Update-Flow (OTA, A/B)
+# Update flow (OTA, A/B)
 
-Wie ein Update vom Dev-Rechner bis zum committeten Slot auf dem Board läuft,
-und was Dev von Prod unterscheidet. Release-Erstellung im Detail:
-[RELEASING.md](RELEASING.md).
+How an update travels from the dev machine to a committed slot on the board, and
+what separates dev from prod. For cutting a release see [RELEASING.md](releasing.md).
 
-## Architektur in einem Satz
+## In one sentence
 
-Signiertes RAUC-Bundle (rootfs + Kernel-Set) → Server → Board lädt, prüft
-Checksum + Signatur, schreibt den inaktiven Slot → einmaliger tryboot-Boot in
-den neuen Slot → Health-Gate → Commit; jeder Fehler davor fällt automatisch
-auf den alten Slot zurück.
+Signed RAUC bundle (rootfs + kernel set) → server → board downloads, verifies
+checksum + signature, writes the inactive slot → one-shot tryboot into the new
+slot → health gate → commit; any failure before commit falls back to the old slot.
 
-## Ablauf im Detail
+## Step by step
 
-1. **Build + Bundle** (Dev-Rechner): `./automation.sh build` baut das Image,
-   danach manuell `scripts/make-release.sh` (`--mode dev|prod`) für
-   `shareframe-<ver>.raucb` (verity-Format, signiert) + `.sha256`-Datei. Inhalt: `rootfs.squashfs` (komplettes System
-   inkl. Kernel-Quellen) + `boot.tar` (zImage, dtb, overlays, initramfs,
-   cmdline) + `hook.sh` (cmdline-Slot-Fixup, optionale pre/post-Skripte).
-2. **Server** (manuell): `.raucb` im Django-Admin hochladen, Checksum-String
-   aus der `.sha256`-Datei ins `checksum`-Feld, Criticality + Groups +
-   `is_active` setzen.
-3. **Check** (Board, `shareframe-update`-Dienst): periodisch (6 h) oder per
-   Dashboard-Button. `GET /api/frame-updates/latest/` (TokenAuth) → Version
-   neuer als `/etc/shareframe-release`? `Critical` startet sofort, sonst
-   wartet das Board auf den Button.
-4. **Download**: `HTTPClient::downloadToFile` streamt die `download_url`
-   (TokenAuth-Header) nach `/data/cache/…raucb.part`; Fortschritt aus
-   Content-Length → Dashboard-Balken.
-5. **Integritätsprüfung**: sha256 der Datei == `checksum` vom Server, sonst
-   Abbruch („Checksum mismatch" im Update-Verlauf). Das ist Transportschutz —
-   die **Sicherheit** ist die RAUC-Signaturprüfung gegen
-   `/etc/rauc/ca.cert.pem` beim Install.
-6. **Install** (`rauc install`): Signatur + `compatible=shareframe-pi0w`
-   geprüft; `install-check`-Hook (optionales `pre.sh`, kann abbrechen);
-   rootfs roh in den inaktiven Slot (p2/p3); Boot-Set per `slot-install`-Hook
-   in das Unterverzeichnis `A/` bzw. `B/` der Boot-Partition (p1), cmdline
-   bekommt `rauc.slot=<Slot>`; optionales `post.sh`. Danach staged der
-   tryboot-Backend `set-primary` den Slot (`/data/rauc/pending` +
-   `/run/tryboot`).
-7. **Reboot**: sauberer s6-Shutdown; `rc.shutdown.final` sieht `/run/tryboot`
-   und ruft `tryboot-reboot` (reboot-Syscall mit „0 tryboot") — die Firmware
-   lädt dadurch **einmalig** `tryboot.txt` (`os_prefix=B/`) statt
-   `config.txt` (`os_prefix=A/`).
-8. **Erster Boot im neuen Slot**: initramfs mountet das rootfs des Slots
-   (`rauc.slot=` → p2/p3), System-Migrationen laufen
-   (`/usr/share/shareframe/system-migrations/`, idempotent, auf /data),
-   `rauc-mark-good` wartet auf App-Dienste + Health, dann
-   `rauc status mark-good` → Backend **committet** (tauscht die beiden
-   `os_prefix`-Zeilen in config.txt/tryboot.txt).
-9. **Fehlerfälle = automatischer Rollback**: Kernel-Panic (`panic=10`),
-   Watchdog (Userspace-Hänger), Stromausfall, Health-Gate nicht erreicht,
-   einfacher `reboot` vor dem Commit — der nächste Boot lädt wieder
-   `config.txt` = alter Slot. `rauc-reconcile` räumt `pending` ab und
-   schreibt „Zurückgerollt" in den Update-Verlauf
-   (`/data/shareframe/update-history.jsonl`, Dashboard → Verwaltung).
+1. **Build + bundle** (dev machine): `./automation.sh build`, then
+   `scripts/make-release.sh` (`--mode dev|prod`) produces the signed verity
+   `.raucb` + `.sha256`. Contents: the rootfs squashfs (full system incl. kernel),
+   a boot tarball (zImage, dtb, overlays, initramfs, cmdline), and an install hook
+   (cmdline slot fixup + optional pre/post scripts).
+2. **Server** (manual): upload and publish the bundle — see RELEASING.md step 4.
+3. **Check** (board update service): periodically (6 h) or on the dashboard
+   button. Queries the server's `/latest` (token auth) → version newer than the
+   installed one? `Critical` starts immediately, otherwise it waits for the button.
+4. **Download**: streams the bundle to `/data/cache` with a token-auth header;
+   progress from Content-Length drives the dashboard bar.
+5. **Integrity check**: file sha256 must equal the server checksum, else abort
+   ("checksum mismatch"). That is transport protection — the actual **security**
+   is the RAUC signature check against the on-target CA cert at install.
+6. **Install** (`rauc install`): signature + compatible string verified; the
+   install-check hook runs (optional `pre.sh`, may abort); the rootfs is written
+   raw to the inactive slot; the boot set goes into that slot's `A/` or `B/`
+   subdir on the boot partition with `rauc.slot=<slot>` patched into the cmdline;
+   optional `post.sh`. The tryboot backend then stages the slot as pending.
+7. **Reboot**: clean s6 shutdown; the final shutdown step sees the tryboot flag
+   and reboots with the firmware one-shot tryboot, so the firmware loads
+   `tryboot.txt` (new slot) **once** instead of `config.txt` (old slot).
+8. **First boot in the new slot**: the initramfs mounts the slot's rootfs, system
+   migrations run (idempotent, on /data), then the mark-good gate waits for the
+   app services + health and commits (swaps the two `os_prefix` lines in
+   config.txt/tryboot.txt).
+9. **Failure = automatic rollback**: kernel panic (`panic=10`), watchdog, power
+   loss, health gate not reached, or a plain reboot before commit — the next boot
+   loads `config.txt` again (old slot). The boot-time reconcile clears the pending
+   flag and writes "rolled back" to the update history.
 
-## Dev vs. Prod
+## Dev vs prod
 
 | | Dev | Prod |
 |---|---|---|
-| Signatur-Keys | `br2-external/package/shareframe-rauc/files/` (gen-dev-keys.sh, gitignored) | `~/.shareframe-release-keys/` (gen-prod-keys.sh, offline) |
-| Trust-Anchor im Image | Dev-CA (Paket-Install) | `configs/prod-local/overlay/etc/rauc/ca.cert.pem` (Overlay gewinnt) |
-| Bundles gegenseitig | Prod-Board lehnt Dev-Bundle ab und umgekehrt (anderer CA) | |
-| `SHAREFRAME_BUILD_MODE` | `dev`: `uart_2ndstage=1` (Firmware-UART-Log) | `prod`: still |
-| Auslieferung | Server/Django-Admin — identisch zu Prod, nur dev-signiert | Server/Django-Admin, Boards holen selbst |
-| Version | beliebig (git-sha-Fallback) | numerisches Semver (Server-Pflicht) |
+| Signing keys | rauc package `files/` (gen-dev-keys.sh, gitignored) | `~/.shareframe-release-keys/` (gen-prod-keys.sh, offline) |
+| Trust anchor in image | dev CA (package install) | prod profile overlay's `ca.cert.pem` (overlay wins) |
+| Cross-acceptance | prod board rejects a dev bundle and vice versa (different CA) | |
+| Build mode | `dev`: verbose firmware UART log | `prod`: quiet |
+| Delivery | server — identical to prod, just dev-signed | server; boards pull themselves |
+| Version | any (git-sha fallback) | numeric semver (server-enforced) |
 
-## Persistenz bei Updates
+## Persistence across updates
 
-Kernel + rootfs werden komplett ersetzt. `/` ist squashfs + tmpfs-Overlay:
-**jede Laufzeit-Änderung außerhalb von /data stirbt schon beim normalen
-Reboot** — nicht erst beim Update. /data (f2fs, p4) wird von RAUC nie
-angefasst und überlebt Update wie Rollback:
+Kernel + rootfs are fully replaced. `/` is squashfs + a tmpfs overlay: **any
+runtime change outside /data is lost on a normal reboot** — not just on update.
+/data (f2fs) is never touched by RAUC and survives both update and rollback:
 
-| Was | Wo |
+| What | Where |
 |---|---|
-| Fotos | `/data/shareframe/images` |
-| SQLite-DB (Auth-Token, Settings, Bild-Metadaten, Display-Metriken) | `/data/shareframe/db` |
-| WLAN-Zugangsdaten + AP-Fallback | `/data/wifi/wpa_supplicant.conf`, `/data/wifi/ap.conf` |
-| Frame-Identität (ed25519-Secret) + initiales Dashboard-Passwort | `/data/shareframe/.env.secrets.toml` |
-| SSH-Hostkeys | `/data/dropbear` (bind-mount nach /etc/dropbear) |
-| Zeit-Seed | `/data/fake-hwclock` |
-| Health-Log, Boot-Zähler, Update-Verlauf, Migrationsstand | `/data/shareframe/{health.log,boot_count,update-history.jsonl,migrations.state}` |
-| RAUC-Slot-Status (pending, status.ini, good/bad) | `/data/rauc` |
-| Bundle-Download (transient) | `/data/cache` |
+| Photos | `/data/shareframe/images` |
+| SQLite DB (auth token, settings, image metadata, display metrics) | `/data/shareframe/db` |
+| Wi-Fi credentials + AP fallback | `/data/wifi/` |
+| Frame identity (ed25519 secret) + initial dashboard password | `/data/shareframe/.env.secrets.toml` |
+| SSH host keys | `/data/dropbear` (bind-mounted to /etc/dropbear) |
+| Time seed | `/data/fake-hwclock` |
+| Health log, boot count, update history, migration state | `/data/shareframe/` |
+| RAUC slot status (pending, status, good/bad) | `/data/rauc` |
+| Bundle download (transient) | `/data/cache` |
 
-Bewusst **nicht** persistent: App-/System-Logs (tmpfs, SD-Schonung — nur
-health.log überlebt), resolv.conf/DHCP-Zustand (wird je Boot neu erzeugt),
-App-Konfiguration `config.toml` + Profil (versioniert im Image; Laufzeit-
-Einstellungen liegen in der DB), Zeitzone/Hostname (Build-Zeit).
+Deliberately **not** persistent: app/system logs (tmpfs, to spare the SD — only
+the health log survives), resolv.conf/DHCP state (regenerated each boot), the app
+config + profile (versioned in the image; runtime settings live in the DB),
+timezone/hostname (build time).
 
-## /data-Sicherung gegen kaputte Releases
+## Protecting /data against a broken release
 
-RAUC fasst /data nie an, aber /data ist **eine** f2fs-Partition für beide Slots:
-ein fehlerhaftes neues Release (Migration/Seed/App) könnte eine Datei löschen.
-Den rootfs muss man dafür nicht prüfen (verity + Signatur). `shareframe-update-verify`
-sichert vor dem Slot-Schreiben eine feste Liste unersetzlicher /data-Dateien und
-stellt im Commit-Gate die wieder her, die das neue Release verloren hat:
+RAUC never touches /data, but /data is **one** f2fs partition shared by both
+slots: a faulty new release (migration/seed/app) could delete a file. The
+update-verify tool backs up a fixed list of irreplaceable /data files before the
+slot write and restores any the new release lost, in the commit gate:
 
-| Pfad | Tier |
+| Path | Tier |
 |---|---|
-| `/data/shareframe/.env.secrets.toml` (Frame-Identität) | required |
-| `/data/shareframe/db` (Token/Settings/Metadaten) | required |
-| `/data/wifi/wpa_supplicant.conf` | wichtig |
-| `/data/wifi/ap.conf` | wichtig (aus Seriennr. regenerierbar) |
+| `/data/shareframe/.env.secrets.toml` (frame identity) | required |
+| `/data/shareframe/db` (token/settings/metadata) | required |
+| `/data/wifi/wpa_supplicant.conf` | important |
+| `/data/wifi/ap.conf` | important (regenerable from the serial) |
 
-- **`backup`** läuft im **alten System** im `install-check`-Hook (in jedem Bundle
-  fest verdrahtet, nicht per Release) → kopiert vorhandene Pfade nach
-  `/data/shareframe/update-verify/backup/` (DB als `db.tar`).
-- **`restore`** läuft im **neuen System** in `rauc-mark-good`: fehlende Pfade aus
-  dem Backup zurückspielen (vorhandene werden nie überschrieben). Ist ein
-  **required**-Pfad weg *und* nicht wiederherstellbar, bleibt das Gate zu →
-  kein Commit → Rollback. Ergebnis je Pfad in
-  `/data/shareframe/update-verify/last.json` (`present`/`restored`/`missing`).
+- **backup** runs in the **old system** in the install-check hook (wired into
+  every bundle, not per release) → copies existing paths into a backup area
+  (DB as a tar).
+- **restore** runs in the **new system** in the mark-good gate: missing paths are
+  replayed from the backup (existing ones are never overwritten). If a **required**
+  path is gone *and* unrestorable, the gate stays shut → no commit → rollback.
+  Per-path result in `update-verify/last.json` (`present`/`restored`/`missing`).

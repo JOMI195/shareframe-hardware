@@ -1,5 +1,3 @@
 #!/bin/sh
-# Drop the /data/dropbear -> /etc/dropbear bind on shutdown so /data isn't held
-# busy when mount-data's `down` unmounts it. Runs as bind-persistent-state's
-# `down`, which s6-rc sequences before mount-data's down (reverse dep order).
+# Drop the dropbear bind on shutdown so /data isn't held busy when it unmounts.
 umount /etc/dropbear 2>/dev/null || true

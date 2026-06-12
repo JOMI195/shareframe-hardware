@@ -147,5 +147,5 @@ echo "Bundle:   ${OUT_BUNDLE}"
 echo "Checksum: ${OUT_BUNDLE}.sha256"
 echo "Metadata: ${OUT_DIR}/release.json"
 echo
-echo "sha256 (-> Server-Feld 'checksum'): ${SHA256}"
+echo "sha256 (-> server 'checksum' field): ${SHA256}"
 ls -lh "${OUT_BUNDLE}"

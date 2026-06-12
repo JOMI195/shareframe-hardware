@@ -1,6 +1,4 @@
-################################################################################
 # tryboot-reboot
-################################################################################
 
 TRYBOOT_REBOOT_VERSION = 1.0
 TRYBOOT_REBOOT_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/package/tryboot-reboot/src

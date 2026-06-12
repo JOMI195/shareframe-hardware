@@ -1,7 +1,6 @@
 #!/bin/sh
-# Boot-time reconcile of a staged A/B update. A pending slot that is NOT the
-# booted slot means the tryboot attempt failed (kernel never came up, watchdog
-# fired, or power was cut before the reboot): mark it bad — never auto-retry —
+# Boot-time reconcile of a staged A/B update. A pending slot that isn't the
+# booted slot means the tryboot attempt failed: mark it bad (never auto-retry)
 # and record the rollback for the dashboard.
 set -u
 PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"

@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
-# Generate the PROD RAUC signing CA + leaf cert + key into a directory OUTSIDE
-# the repo (default ~/.shareframe-release-keys). The private key must never
-# enter the repo or the image; only ca.cert.pem is copied into the prod config
-# profile (configs/<profile>/overlay/etc/rauc/ca.cert.pem) as trust anchor.
-#
-# Builds then sign with:
-#   SHAREFRAME_RELEASE_CERT=$KEYDIR/cert.pem \
-#   SHAREFRAME_RELEASE_KEY=$KEYDIR/key.pem  scripts/make-release.sh --mode prod
+# Generate the PROD RAUC signing CA + leaf cert + key, OUTSIDE the repo (default
+# ~/.shareframe-release-keys). Keep the private key offline; only ca.cert.pem
+# (the trust anchor) goes into the prod config profile. make-release.sh --mode
+# prod signs with the cert/key via env vars.
 set -euo pipefail
 
 KEYDIR="${1:-$HOME/.shareframe-release-keys}"

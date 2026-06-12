@@ -1,12 +1,7 @@
 /*
- * sysinfo — Shareframe-Board "fastfetch"-style system banner.
- *
- * A board-agnostic *renderer*: it runs the shareframe-sysinfo overlay script
- * (the single source of board-specific reads) and parses its `key=value`
- * output, then prints a column of formatted system-info rows; -b/--banner
- * additionally prints the full-width logo first (used by the login profile).
- * Missing keys are simply skipped, so a metric whose source is absent just
- * drops out of the display.
+ * sysinfo — board-agnostic system banner. Runs the shareframe-sysinfo overlay
+ * (the source of board-specific reads), parses its key=value output, and prints
+ * formatted rows; -b/--banner prints the logo first. Missing keys are skipped.
  */
 #define _DEFAULT_SOURCE
 
@@ -22,7 +17,7 @@
 #endif
 #define MAX_KV   64
 
-/* ---- parsed key=value store --------------------------------------------- */
+/* parsed key=value store */
 
 struct kv { char *k; char *v; };
 static struct kv g_kv[MAX_KV];
@@ -65,7 +60,7 @@ static void ingest(void)
 	pclose(fp);
 }
 
-/* ---- colors ------------------------------------------------------------- */
+/* colors */
 
 static const char *C_LOGO = "";
 static const char *C_LABEL = "";
@@ -80,7 +75,7 @@ static void init_colors(void)
 	C_RESET = "\033[0m";
 }
 
-/* ---- formatters --------------------------------------------------------- */
+/* formatters */
 
 static int get_u64(const char *key, uint64_t *out)
 {
@@ -123,10 +118,9 @@ static void fmt_uptime(uint64_t s, char *out, size_t n)
 		snprintf(out, n, "%llum", m);
 }
 
-/* ---- banner + rows ------------------------------------------------------ */
+/* banner + rows */
 
-/* ANSI-Shadow figlet of "Shareframe Board" — kept byte-identical to the
- * pre-login /etc/issue art so both entrances show the same logo. */
+/* figlet logo — byte-identical to the /etc/issue art so both show the same. */
 static const char *logo[] = {
 	"███████╗██╗  ██╗ █████╗ ██████╗ ███████╗███████╗██████╗  █████╗ ███╗   ███╗███████╗",
 	"██╔════╝██║  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗████╗ ████║██╔════╝",
@@ -274,8 +268,7 @@ int main(int argc, char **argv)
 	disk_row("Root", "storage_root_total_bytes", "storage_root_free_bytes");
 	disk_row("Data", "storage_data_total_bytes", "storage_data_free_bytes");
 
-	/* WLAN: ssid (AP-prefixed in fallback mode), ip, signal, link state —
-	 * show whatever is present; signal/link are meaningless for our own AP. */
+	/* WLAN: show whatever is present; signal/link are meaningless for our own AP. */
 	const char *mode = val("wifi_mode");
 	const char *ssid = val("wifi_ssid");
 	const char *ipw = val("ip_wlan0");

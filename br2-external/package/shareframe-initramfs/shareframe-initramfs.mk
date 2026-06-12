@@ -1,19 +1,7 @@
-################################################################################
-#
-# shareframe-initramfs
-#
-# Tiny initramfs (~500 KiB) loaded by the Pi firmware (config.txt initramfs
-# directive). Its /init parses rauc.slot from
-# /proc/cmdline, mounts the chosen squashfs slot partition read-only, sets up
-# a tmpfs overlay for writable /, then switch_root into /sbin/init (s6).
-#
-# Built via the kernel's gen_init_cpio + a declarative manifest
-# (initramfs.list). Manifest declares files / dirs / symlinks / the
-# /dev/console char node without needing root or mknod. Busybox must be
-# statically linked (CONFIG_STATIC=y) so no /lib/ld-musl-armhf.so.1 needs
-# packaging.
-#
-################################################################################
+# shareframe-initramfs — tiny initramfs loaded by the Pi firmware. Its /init
+# parses rauc.slot, mounts the chosen squashfs slot read-only, sets up a tmpfs
+# overlay for writable /, then switch_root into s6. Built via gen_init_cpio +
+# a declarative manifest; busybox must be statically linked.
 
 SHAREFRAME_INITRAMFS_VERSION = 1.0
 SHAREFRAME_INITRAMFS_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/package/shareframe-initramfs

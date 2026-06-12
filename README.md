@@ -27,4 +27,4 @@ Zero W). Single entry point: `./automation.sh`.
 > configs; `br2-external/configs/` holds the Buildroot defconfig + busybox
 > fragment.
 
-See [docs/RELEASING.md](docs/RELEASING.md) for cutting a release.
+See [docs/RELEASING.md](docs/releasing.md) for cutting a release.

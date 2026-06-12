@@ -1,10 +1,8 @@
 #!/bin/sh
-# Gate: block until the clock looks real (post-2023), i.e. ntpd has stepped it.
-# Without this, the first-ever boot (no saved hwclock) starts near the epoch and
-# TLS to the backend fails cert validation (cert "not yet valid"); token/image
-# expiry math is also wrong. Only the network/TLS services (websocket, heartbeat)
-# gate on this. Bounded: continue after TIMEOUT so boot never hangs — those
-# services' retry loops cover a still-bad clock.
+# Gate: block until the clock looks real (ntpd has stepped it). Without this the
+# first-ever boot starts near the epoch and TLS to the backend fails cert
+# validation. Only network/TLS services gate on this. Bounded: continue after
+# TIMEOUT (their retry loops cover a still-bad clock).
 THRESHOLD=1700000000   # ~2023-11-14
 TIMEOUT=30
 

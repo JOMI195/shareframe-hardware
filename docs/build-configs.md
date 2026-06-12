@@ -46,4 +46,4 @@ Only `configs/example/` is tracked, as a credless template; every other
 On a fundamental overlay change, `./automation.sh clean` before building if in
 doubt.
 
-See [RELEASING.md](RELEASING.md) for turning a build into a signed release.
+See [RELEASING.md](releasing.md) for turning a build into a signed release.

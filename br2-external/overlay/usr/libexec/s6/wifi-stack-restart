@@ -8,23 +8,17 @@ log() {
     echo "wifi-stack-restart: $*" > /dev/console
 }
 
-# Don't fight an intentional shutdown/reboot (see rc.shutdown). Re-upping the
-# wifi services here keeps s6-rc's down transition from settling, hanging the
-# whole shutdown so the board never reboots.
+# Don't fight an intentional shutdown: re-upping wifi would hang s6-rc's down transition.
 if [ -e /run/shutting-down ]; then
     exit 0
 fi
 
-# Don't fight wifi-mode-manager while it is deliberately switching wlan0 between
-# station and AP mode: it stops wpa_supplicant/dhcpcd on purpose, and re-upping
-# them here would defeat the AP fallback. The manager clears this flag once it
-# wants the station back.
+# Don't fight the mode-manager mid-switch: re-upping would defeat the AP fallback.
 if [ -e /run/shareframe/wifi-switching ]; then
     exit 0
 fi
 
-# After the guards on purpose: must not repaint the LED over an intentional
-# shutdown (`off`) or AP switch (`ap-mode`).
+# After the guards: don't repaint the LED over a shutdown or AP switch.
 /usr/bin/shareframe-led wifi-connecting 2>/dev/null || true
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -56,8 +50,7 @@ if ip link show wlan0 >/dev/null 2>&1; then
     fi
 fi
 
-# s6-svc takes a single service dir; restart each (wpa first — dhcpcd-wlan
-# waits on its ctrl socket).
+# Restart each (wpa first — dhcpcd-wlan waits on its ctrl socket).
 if ! s6-svc -r /run/service/wpa_supplicant; then
     log "failed to restart wpa_supplicant"
     exit 1

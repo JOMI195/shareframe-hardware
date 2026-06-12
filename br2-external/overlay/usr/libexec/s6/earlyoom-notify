@@ -1,8 +1,6 @@
 #!/bin/sh
-# earlyoom-notify — run by earlyoom (-N) on every kill. Funnels earlyoom's
-# kills into the same reporting surface as shareframe-health so an OOM event is
-# visible in the persisted log, on the LED, and to the dashboard. earlyoom sets
-# EARLYOOM_PID / EARLYOOM_NAME / EARLYOOM_UID (name may be empty / contain junk).
+# Run by earlyoom (-N) on every kill. Funnels kills into shareframe-health's
+# reporting surface (log, LED, dashboard). earlyoom sets EARLYOOM_PID/NAME/UID.
 set -u
 
 STATE_DIR=/run/shareframe
@@ -18,8 +16,7 @@ printf '%s [oom] earlyoom killed pid=%s name=%s uid=%s\n' "$ts" "$pid" "$name" "
 	>> "$LOG_FILE" 2>/dev/null || true
 logger -t earlyoom "killed pid=$pid name=$name uid=$uid" 2>/dev/null || true
 
-# Bump a counter shareframe-health's check_oom also watches via dmesg; this gives
-# an immediate signal even between its poll cycles.
+# Bump the OOM counter for an immediate signal between health polls.
 c=0; [ -f "$STATE_DIR/oom-kills" ] && c=$(cat "$STATE_DIR/oom-kills" 2>/dev/null)
 printf '%s\n' "$((c + 1))" > "$STATE_DIR/oom-kills" 2>/dev/null || true
 

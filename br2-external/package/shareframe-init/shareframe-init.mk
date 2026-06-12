@@ -1,8 +1,4 @@
-################################################################################
-#
-# shareframe-init  (s6 PID1 basedir + s6-rc DB)
-#
-################################################################################
+# shareframe-init — s6 PID1 basedir + s6-rc DB.
 
 SHAREFRAME_INIT_VERSION = 1.0
 SHAREFRAME_INIT_SITE = $(BR2_EXTERNAL_SHAREFRAME_PATH)/package/shareframe-init
@@ -26,7 +22,7 @@ define SHAREFRAME_INIT_INSTALL_TARGET_CMDS
 		-m 0022 -1 \
 		$(TARGET_DIR)/etc/s6-linux-init/current
 
-	# 2) Stage-2 Scripts ueberschreiben
+	# 2) override stage-2 scripts
 	$(INSTALL) -m 0755 $(@D)/skel/rc.init           $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.init
 	$(INSTALL) -m 0755 $(@D)/skel/rc.shutdown       $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.shutdown
 	$(INSTALL) -m 0755 $(@D)/skel/rc.shutdown.final $(TARGET_DIR)/etc/s6-linux-init/current/scripts/rc.shutdown.final
@@ -41,12 +37,12 @@ define SHAREFRAME_INIT_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 0755 $(@D)/skel/halt     $(TARGET_DIR)/sbin/halt
 	$(INSTALL) -m 0755 $(@D)/skel/shutdown $(TARGET_DIR)/sbin/shutdown
 
-	# 4) Host/Target-Pfad-Symlinks (execlineb in /bin, oneshot-run in /libexec)
+	# 4) host/target path symlinks (execlineb in /bin, oneshot-run in /libexec)
 	ln -sf /bin/execlineb $(TARGET_DIR)/usr/bin/execlineb
 	mkdir -p $(TARGET_DIR)/usr/libexec
 	ln -sf /libexec/s6-rc-oneshot-run $(TARGET_DIR)/usr/libexec/s6-rc-oneshot-run
 
-	# 5) s6-rc Service-DB
+	# 5) s6-rc service DB
 	rm -rf $(TARGET_DIR)/etc/s6-rc/compiled
 	mkdir -p $(TARGET_DIR)/etc/s6-rc
 	$(HOST_DIR)/bin/s6-rc-compile $(TARGET_DIR)/etc/s6-rc/compiled \

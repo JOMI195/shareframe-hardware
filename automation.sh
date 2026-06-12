@@ -8,7 +8,7 @@ TOOLCHAIN_NAME="armv6-eabihf--musl--bleeding-edge-2025.08-1"
 TOOLCHAIN_BASE_URL="https://toolchains.bootlin.com/downloads/releases/toolchains/armv6-eabihf/tarballs/"
 
 PI4B="${PI4B:-base@shareframe-base}"
-PI4B_SERIAL="${PI4B_SERIAL:-/dev/ttyACM0}"   # Raspberry Pi Debug Probe am 4B = CDC-ACM
+PI4B_SERIAL="${PI4B_SERIAL:-/dev/ttyACM0}"   # Pi Debug Probe on the 4B = CDC-ACM
 
 [[ -d artifacts ]] || mkdir artifacts
 [[ -d build ]] || mkdir build
@@ -39,7 +39,7 @@ function gpg_verify_fetch() {
     gpg --verify "$sigfile"
 }
 
-# prepare kernel download and recall stored config file to kernel src/ dir
+# download + verify + extract a source tarball into src_dir
 function prepare_src() {
     local src_uri="$1"
     local sig_uri="$2"
@@ -75,7 +75,7 @@ function prepare_src() {
 }
 
 function toolchain() {
-    echo "=== Toolchain herunterladen, prüfen, entpacken ==="
+    echo "=== Download, verify, extract toolchain ==="
     local src_uri="$TOOLCHAIN_BASE_URL/$TOOLCHAIN_NAME.tar.xz"
     local sig_uri="$TOOLCHAIN_BASE_URL/$TOOLCHAIN_NAME.sha256"
     local src_dir="build/toolchain"
@@ -92,18 +92,11 @@ function buildroot() {
     local config="buildroot-rpi0w"
     local config_dir="${1:-}"
 
-    # SHAREFRAME_BUILD_MODE: dev | prod (default). Picked up by:
-    #   - post-image.sh -> dev adds uart_2ndstage=1 (verbose firmware UART log)
-    #   - post-build.sh -> writes /etc/shareframe-build-mode
+    # Build flavor (default prod); dev adds verbose firmware UART logging.
     export SHAREFRAME_BUILD_MODE="${SHAREFRAME_BUILD_MODE:-prod}"
     echo "=== SHAREFRAME_BUILD_MODE=${SHAREFRAME_BUILD_MODE} ==="
 
-    # SHAREFRAME_PROFILE: dev | prod (default) | prod.local. Picked up by:
-    #   - post-build.sh -> writes /etc/shareframe-profile (read by the 60-app
-    #     s6 run scripts, exported as SHAREFRAME_PROFILE into the app env)
-    # Selects which /etc/shareframe/config.<profile>.toml overlay the app merges
-    # on top of config.toml. The matching file must be installed by the
-    # shareframe-board package (CMakeLists install(FILES ...)).
+    # Config profile (default prod); selects which config overlay the app merges.
     export SHAREFRAME_PROFILE="${SHAREFRAME_PROFILE:-prod}"
     case "${SHAREFRAME_PROFILE}" in
         dev|prod|prod.local) ;;
@@ -111,7 +104,7 @@ function buildroot() {
     esac
     echo "=== SHAREFRAME_PROFILE=${SHAREFRAME_PROFILE} ==="
 
-    echo "=== Buildroot herunterladen und entpacken ==="
+    echo "=== Download and extract Buildroot ==="
     local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
     local sig_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz.sign"
     local src_dir="build/buildroot"
@@ -121,24 +114,19 @@ function buildroot() {
       "$sig_uri" \
       "$src_dir"
 
-    echo "=== Buildroot konfigurieren ==="
+    echo "=== Configure Buildroot ==="
     make -C "$src_dir" \
       BR2_DEFCONFIG="$(realpath "br2-external/configs/${config}.conf")" \
       BR2_EXTERNAL="$(realpath br2-external)" \
       defconfig
 
-    # Config-Ordner: privaten 2. Overlay registrieren + externe Pfade als local.mk.
-    # local.mk wird jeden Build neu/leer geschrieben, damit kein Override vom
-    # Vorbuild haengen bleibt. Buildroot liest $(CONFIG_DIR)/local.mk automatisch
-    # (= $src_dir/local.mk beim in-tree-Build).
+    # Reset local.mk each build so no override leaks from a previous build.
     : > "$src_dir/local.mk"
     if [ -n "$config_dir" ] && [ -d "$config_dir/overlay" ]; then
-        # Last-wins in Kconfig -> diese Zeile ueberschreibt das BR2_ROOTFS_OVERLAY
-        # der defconfig; getracktes ../../br2-external/overlay bleibt erster Overlay,
-        # der Config-Overlay ergaenzt/ueberschreibt darueber.
+        # Last-wins: tracked overlay first, config overlay layered on top.
         printf 'BR2_ROOTFS_OVERLAY="../../br2-external/overlay %s"\n' \
             "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
-        echo "=== 2. Overlay: $(realpath "$config_dir/overlay") ==="
+        echo "=== Second overlay: $(realpath "$config_dir/overlay") ==="
     fi
     if [ -n "${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-}" ]; then
         printf 'SHAREFRAME_BOARD_OVERRIDE_SRCDIR = %s\n' \
@@ -153,7 +141,7 @@ function buildroot() {
 
     make -C "$src_dir" olddefconfig
 
-    echo "=== Buildroot bauen ==="
+    echo "=== Build Buildroot ==="
     make -C "$src_dir" rpi-firmware-dirclean
     make -C "$src_dir" shareframe-init-dirclean
     make -C "$src_dir" linux-reconfigure
@@ -163,24 +151,21 @@ function buildroot() {
         make -C "$src_dir" "$(basename "$mk" .mk)-reconfigure"
     done
 
-    # Leak-Schutz: TARGET_DIR wird zwischen inkrementellen
-    # Builds nicht geleert und die .default-Seeds kommen per Overlay (kein Paket
-    # -> kein dirclean). Bekannte sicherheitskritische Seed-Pfade entfernen; der
-    # aktive Config-Overlay legt sie neu an, sonst faellt das Seed-Skript auf das
-    # getrackte .template zurueck.
+    # Drop stale secret seeds: TARGET_DIR persists across incremental builds;
+    # the active overlay (or the tracked .template) re-creates them.
     rm -f "$src_dir/output/target/usr/share/shareframe/.env.secrets.toml.default" \
           "$src_dir/output/target/usr/share/shareframe/wpa_supplicant.conf.default"
 
     make -C "$src_dir" -j"$(nproc)"
 
-    echo "=== Generierte Dateien extrahieren ==="
+    echo "=== Extract generated files ==="
     local img="$src_dir/output/images"
     local artifact_label="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
 
     rm -rf "artifacts/deploy/$artifact_label" "artifacts/sdcard/$artifact_label"
     mkdir -p "artifacts/deploy/$artifact_label" "artifacts/sdcard/$artifact_label"
 
-    # --- artifacts/deploy/<label>/ : Einzelartefakte (QEMU, Debugging).
+    # artifacts/deploy/<label>/: individual artifacts (QEMU, debugging).
     cp "$img/zImage"                  "artifacts/deploy/$artifact_label/"
     cp "$img/bcm2835-rpi-zero-w.dtb"  "artifacts/deploy/$artifact_label/"
     [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" "artifacts/deploy/$artifact_label/"
@@ -188,34 +173,25 @@ function buildroot() {
     cp "$img/initramfs.cpio.gz"       "artifacts/deploy/$artifact_label/"
     ln -sfn "$artifact_label" artifacts/deploy/latest
 
-    # --- artifacts/sdcard/<label>/ : komplettes SD-Image (fw + boot A/B + rootfs A/B + /data)
-    # via genimage (BR2_ROOTFS_POST_IMAGE_SCRIPT = board/raspberrypi0w/post-image.sh).
-    # Einmaliges `dd if=sdcard.img of=/dev/sdX` legt alle Partitionen an.
+    # artifacts/sdcard/<label>/: full SD image (one dd writes all partitions).
     if [ -f "$img/sdcard.img" ]; then
         cp "$img/sdcard.img" "artifacts/sdcard/$artifact_label/"
     else
-        echo "WARN: sdcard.img nicht gefunden — post-image.sh oder genimage failed?"
+        echo "WARN: sdcard.img not found — post-image.sh or genimage failed?"
     fi
     ln -sfn "$artifact_label" artifacts/sdcard/latest
 
-    echo "=== Auswertung (${artifact_label}) ==="
+    echo "=== Inspect (${artifact_label}) ==="
     file "$(realpath "artifacts/deploy/$artifact_label/zImage")"
     [ -f "artifacts/deploy/$artifact_label/rootfs.squashfs" ] && file "$(realpath "artifacts/deploy/$artifact_label/rootfs.squashfs")"
     [ -f "artifacts/sdcard/$artifact_label/sdcard.img" ] && file "$(realpath "artifacts/sdcard/$artifact_label/sdcard.img")"
 }
 
 function qemu_rpi0() {
-    # Quick-Verify ohne Hardware: bootet zImage + initramfs bis BusyBox-Login.
-    # USB-Gadget/usb0/SSH sind in QEMU NICHT testbar (kein Host-Gegenstück) — die
-    # "ip: can't find device usb0"-Meldungen sind hier normal.
-    #
-    # Konsole = ttyS1 (mini-UART, 0x20215040) wie auf echter Hardware (GPIO-UART zum 4B).
-    # QEMU-only:
-    #  - "-serial null -serial mon:stdio": legt die mini-UART (serial_hd(1)) auf stdio,
-    #    sonst zeigt -nographic nur die PL011 und ttyS1 bliebe unsichtbar.
-    #  - earlycon=uart8250,...,0x20215040: Early-Output auf der mini-UART.
-    #  - initcall_blacklist=...power/wdt: QEMU modelliert den BCM2835-PM/Watchdog-
-    #    Block nicht -> sonst Oops in bcm2835_power_probe bzw. Reboot-Loop.
+    # Headless boot to BusyBox login; no hardware. usb0/SSH untestable in QEMU
+    # ("can't find device usb0" is normal). Console on the mini-UART (ttyS1) as on
+    # real hardware; the second -serial puts it on stdio. initcall_blacklist skips
+    # the BCM2835 power/watchdog blocks QEMU doesn't model (else Oops/reboot loop).
     qemu-system-arm \
         -M raspi0 \
         -nographic \
@@ -259,7 +235,7 @@ function clean() {
     done
 
     local src_dir="build/buildroot"
-    echo "=== Aufräumen ==="
+    echo "=== Clean ==="
 
     if [ -d "$src_dir" ]; then
         case "$mode" in
@@ -275,7 +251,7 @@ function clean() {
     fi
 
     if [ "$mode" = "toolchain" ]; then
-        echo "=== Toolchain entfernen ==="
+        echo "=== Remove toolchain ==="
         rm -rf "build/toolchain"
         rm -f "build/$TOOLCHAIN_NAME.tar.xz" "build/$TOOLCHAIN_NAME.sha256"
     fi
@@ -283,14 +259,14 @@ function clean() {
     rm -rf artifacts/ build/buildroot/output/
     rm -f build/buildroot-*.tar.gz build/buildroot-*.tar.gz.sign
 
-    echo "=== Modul-Build-Artefakte entfernen ==="
+    echo "=== Remove module build artifacts ==="
     rm -rf br2-external/modules/*/src/{.tmp_versions,*.o,*.ko,*.mod,*.mod.c,*.mod.o,Module.symvers,modules.order,.*.cmd}
 }
 
 function build() {
-  echo "=== Bauen ==="
+  echo "=== Build ==="
 
-  # usage: ./automation.sh build [configs/<kunde>] [--version X.Y.Z]
+  # usage: ./automation.sh build [configs/<customer>] [--version X.Y.Z]
   local config_dir="" version=""
   while [ $# -gt 0 ]; do
       case "$1" in
@@ -324,12 +300,12 @@ function build() {
 }
 
 function restart() {
-    echo "=== Power-Cycle des Pi Zero über den 4B (uhubctl) ==="
+    echo "=== Power-cycle the Pi Zero via the 4B (uhubctl) ==="
     ssh "$PI4B" "reset-zero"
 }
 
 function connect_serial() {
-    echo "=== Verbinde zur Zero-Serial-Konsole über den 4B ==="
+    echo "=== Connect to the Zero serial console via the 4B ==="
     ssh -t "$PI4B" "picocom -b 115200 $PI4B_SERIAL"
 }
 
@@ -349,7 +325,7 @@ function release() {
     validate_version "$version"
     [ -d "releases/${version}" ] || { echo "release: releases/${version}/ not found — create it first" >&2; return 1; }
     [ -f build/buildroot/output/images/rootfs.squashfs ] || {
-        echo "release: kein Build gefunden — zuerst ./automation.sh build --version ${version} [configs/...]" >&2; return 1; }
+        echo "release: no build found — run ./automation.sh build --version ${version} [configs/...] first" >&2; return 1; }
 
     case "$mode" in
         dev)
@@ -362,13 +338,13 @@ function release() {
             : "${SHAREFRAME_RELEASE_CERT:=$keydir/cert.pem}"
             : "${SHAREFRAME_RELEASE_KEY:=$keydir/key.pem}"
             [ -f "$SHAREFRAME_RELEASE_CERT" ] && [ -f "$SHAREFRAME_RELEASE_KEY" ] || {
-                echo "release: Prod-Keys fehlen in $keydir (scripts/gen-prod-keys.sh)" >&2; return 1; }
+                echo "release: prod keys missing in $keydir (scripts/gen-prod-keys.sh)" >&2; return 1; }
             SHAREFRAME_RELEASE_CERT="$SHAREFRAME_RELEASE_CERT" \
             SHAREFRAME_RELEASE_KEY="$SHAREFRAME_RELEASE_KEY" \
             scripts/make-release.sh --mode prod --version "$version" "${args[@]}"
             ;;
         *)
-            echo "release: Modus muss dev oder prod sein" >&2
+            echo "release: mode must be dev or prod" >&2
             return 1
             ;;
     esac

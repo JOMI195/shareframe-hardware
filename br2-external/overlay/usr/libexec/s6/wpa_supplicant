@@ -2,7 +2,5 @@
 sleep 1
 until [ -e /sys/class/net/wlan0 ]; do sleep 2; done
 mkdir -p /var/run/wpa_supplicant
-# Config lives on /data so save_config (via wpa_cli) is persistent across
-# reboots and A/B slot switches. mount-data seeded /data/wifi/wpa_supplicant.conf
-# from /usr/share/shareframe/wpa_supplicant.conf.default on first boot.
+# Config lives on /data so saved networks persist across reboots and A/B switches.
 exec wpa_supplicant -i wlan0 -c /data/wifi/wpa_supplicant.conf -D nl80211

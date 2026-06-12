@@ -1,10 +1,10 @@
 #!/bin/bash
-# Inter-build (Post-fakeroot): Anpassungen mit simulierten Root-Rechten
+# Inter-build (post-fakeroot): adjustments with simulated root privileges.
 set -e
 
 TARGET_DIR="$1"
 
-echo "=== Inter-build: fakeroot-Kontext aktiv ==="
+echo "=== Inter-build: fakeroot context active ==="
 echo "    TARGET_DIR=$TARGET_DIR"
-echo "    EUID=$(id -u)   (im fakeroot scheinbar 0)"
-# Stub — kann später z.B. an /etc/fstab anhängen
+echo "    EUID=$(id -u)   (appears as 0 under fakeroot)"
+# Stub — could later append to /etc/fstab, etc.

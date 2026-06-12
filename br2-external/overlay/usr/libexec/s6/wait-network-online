@@ -1,16 +1,12 @@
 #!/bin/sh
-# Gate: block until the internet is reachable (wlan up + DHCP + route), so that
-# shareframe-heartbeat only starts when it can actually POST. Bounded: after
-# TIMEOUT we start heartbeat anyway — it self-skips when offline and retries
-# every interval, so a service that is up-but-skipping beats one stuck down.
+# Gate: block until the internet is reachable so heartbeat only starts when it
+# can POST. Bounded: after TIMEOUT start anyway (it self-skips while offline).
 TARGET=1.1.1.1
 TIMEOUT=120
 
 i=0
 while ! ping -c1 -W1 "$TARGET" >/dev/null 2>&1; do
-    # If wifi-mode-manager has fallen back to AP mode there is no upstream to
-    # reach: stop waiting so the app chain (heartbeat/websocket) starts now and
-    # the dashboard is served over the AP. Those services self-skip while offline.
+    # In AP mode there's no upstream: start the app chain now (served over the AP).
     if [ "$(cat /run/shareframe/wifi-mode 2>/dev/null)" = ap ]; then
         echo "wait-network-online: board in AP mode; starting app chain now" > /dev/console
         exit 0
