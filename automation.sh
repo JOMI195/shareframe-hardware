@@ -128,6 +128,10 @@ function buildroot() {
             "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
         echo "=== Second overlay: $(realpath "$config_dir/overlay") ==="
     fi
+    if [ -n "${SHAREFRAME_ROOT_PASSWD:-}" ]; then
+        printf 'BR2_TARGET_GENERIC_ROOT_PASSWD="%s"\n' "$SHAREFRAME_ROOT_PASSWD" >> "$src_dir/.config"
+        echo "=== Root password: set from config ==="
+    fi
     if [ -n "${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-}" ]; then
         printf 'SHAREFRAME_BOARD_OVERRIDE_SRCDIR = %s\n' \
             "$SHAREFRAME_BOARD_OVERRIDE_SRCDIR" >> "$src_dir/local.mk"
