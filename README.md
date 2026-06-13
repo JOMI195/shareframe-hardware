@@ -1,4 +1,4 @@
-<img width="1280" height="450" alt="shareframe-hardware-title" src="PLACEHOLDER_TITLE_IMAGE_URL" />
+<img width="1280" height="324" alt="shareframe-title-hero" src="https://github.com/user-attachments/assets/087fca2d-a08d-4ff4-904c-b76dc3dc6cf5" />
 
 # Shareframe (Hardware)
 
@@ -17,11 +17,27 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 - USB-gadget networking for development plus WiFi with a STA → AP fallback so the board is always reachable
 - Local management dashboard served on the board itself, discoverable at `shareframe-board.local`
 
+## Project
+
+<table>
+  <tr>
+    <td>
+       <img width="3205" height="2288" alt="picture frame" src="https://github.com/user-attachments/assets/b43545da-41de-4d1b-9fa9-a76141a9124f" />
+      Figure 1: Front view of the picture frame
+    </td>
+    <td>
+      <img width="4018" height="2482" alt="IMG_2260" src="https://github.com/user-attachments/assets/38a6e692-b5df-4ef2-9333-f938b9977b61" />
+      Figure 2: Back view of the picture frame
+    </td>
+  </tr>
+</table>
+
+
 ## Architecture
 
-<img width="902" height="971" alt="shareframe board architecture" src="PLACEHOLDER_ARCH_IMAGE_URL" />
+<img width="1587" height="1041" alt="shareframe-harware-architecture drawio" src="https://github.com/user-attachments/assets/a40991a5-c6c4-4463-9594-124a1af05a03" />
 
-*Figure 1: Outline of the on-device architecture of the Shareframe-Board firmware*
+*Figure 3: Outline of the on-device architecture of the Shareframe-Board firmware*
 
 **Base system**:
 
