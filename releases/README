@@ -1,17 +1,28 @@
-Each release gets a directory named after its version (X.Y.Z).
-The directory name IS the version — no separate VERSION file needed.
+A release dir bundles everything that rides with one OTA update, kept separate
+from the build. The dir name is ARBITRARY (e.g. launch, hotfix-wifi) — the
+version lives in config.env, not the dir name. Mirrors configs/<release>/.
 
-releases/<version>/pre.sh   - install-check hook: runs in the OLD system before
+releases/<release>/config.env  - SHAREFRAME_VERSION (X.Y.Z) + SHAREFRAME_CRITICALITY
+                              (Critical|Important|Minor|Patch). Single source of
+                              the version: build reads it, release reads it.
+releases/<release>/notes.md    - release notes for release.json (dashboard). Optional.
+releases/<release>/pre.sh      - install-check hook: runs in the OLD system before
                               any slot is written; non-zero exit aborts install.
-releases/<version>/post.sh  - boot-slot post-install hook: runs in the OLD
-                              system after slots are written, before reboot.
-                              $RAUC_SLOT_MOUNT_POINT = new boot slot (mounted).
-releases/<version>/notes.md - release notes for release.json.
+                              Optional.
+releases/<release>/post.sh     - boot-slot post-install hook: runs in the OLD system
+                              after slots are written, before reboot.
+                              ${mnt}=boot FAT, ${bn}=target slot. Optional.
 
 Workflow:
-  mkdir releases/1.0.2
-  ./automation.sh build configs/prod-local --version 1.0.2
-  ./automation.sh release prod --version 1.0.2
+  cp -r releases/example releases/<release>
+  $EDITOR releases/<release>/config.env          # set version + criticality
+  ./automation.sh build configs/fleet/<env> --release <release>
+  ./automation.sh release prod --release <release> --from <env>-<version>
+
+One build -> several releases: re-run `release` dev and prod (or re-cut notes)
+from the same --from build; same version, no rebuild.
 
 Run-once-with-this-update only. For run-every-update idempotent work use
 overlay/usr/share/shareframe/system-migrations/ (executes in the NEW system).
+
+Only releases/example/ is tracked; every other releases/<release>/ is gitignored.

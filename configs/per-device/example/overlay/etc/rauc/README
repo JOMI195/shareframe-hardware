@@ -1,0 +1,13 @@
+Drop the PROD trust anchor here as ca.cert.pem (needed so a freshly flashed board
+trusts future OTA updates):
+
+  scripts/gen-prod-keys.sh                 # once; keys stay in ~/.shareframe-release-keys
+  cp ~/.shareframe-release-keys/ca.cert.pem configs/per-device/<name>/overlay/etc/rauc/ca.cert.pem
+
+This overlay applies after packages, so it replaces the dev CA from
+package/shareframe-rauc/files/. The CA cert is public — committing it is fine; the
+private keys must never enter the repo.
+
+A per-device config is for the ONE-TIME SD flash (it also carries this device's
+secret seeds under overlay/usr/share/shareframe/*.default). Build OTA updates from
+a configs/fleet/<env>/ config instead — never from here.

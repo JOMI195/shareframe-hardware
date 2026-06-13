@@ -1,0 +1,13 @@
+Drop the fleet trust anchor here as ca.cert.pem (public; committing it is fine):
+
+  scripts/gen-prod-keys.sh                 # once; keys stay in ~/.shareframe-release-keys
+  cp ~/.shareframe-release-keys/ca.cert.pem configs/fleet/<env>/overlay/etc/rauc/ca.cert.pem
+
+This CA cert is the ONLY credential a fleet config carries. It applies after
+packages, replacing the dev CA from package/shareframe-rauc/files/, so boards
+trust prod-signed updates.
+
+NEVER add per-device secret seeds (overlay/usr/share/shareframe/*.default) to a
+fleet config — they would be baked into the OTA squashfs and shipped to the whole
+group. Per-device secrets belong only in configs/per-device/<name>/ (initial SD
+flash). On a device, /data secrets survive every update untouched.

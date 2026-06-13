@@ -18,6 +18,15 @@ validate_version() {
         echo "Invalid version format '$1' — expected X.Y.Z" >&2; return 1; }
 }
 
+# resolve a release name (or path) to its dir; bare names live under releases/
+resolve_release_dir() {
+    local r="${1%/}"
+    [ -d "$r" ] && { printf '%s' "$r"; return 0; }
+    [ -d "releases/$r" ] && { printf '%s' "releases/$r"; return 0; }
+    echo "release '$1' not found (looked at '$1' and 'releases/$1')" >&2
+    return 1
+}
+
 # download given uri and return name of downloaded file
 function get_uri_prefetch() {
     local dir="${2:-.}"
@@ -94,6 +103,10 @@ function buildroot() {
 
     # Build flavor (default prod); dev adds verbose firmware UART logging.
     export SHAREFRAME_BUILD_MODE="${SHAREFRAME_BUILD_MODE:-prod}"
+    case "${SHAREFRAME_BUILD_MODE}" in
+        dev|prod) ;;
+        *) echo "buildroot: invalid SHAREFRAME_BUILD_MODE='${SHAREFRAME_BUILD_MODE}' (use dev or prod)" >&2; return 1 ;;
+    esac
     echo "=== SHAREFRAME_BUILD_MODE=${SHAREFRAME_BUILD_MODE} ==="
 
     # Config profile (default prod); selects which config overlay the app merges.
@@ -103,6 +116,30 @@ function buildroot() {
         *) echo "buildroot: invalid SHAREFRAME_PROFILE='${SHAREFRAME_PROFILE}' (use dev, prod, prod.local)" >&2; return 1 ;;
     esac
     echo "=== SHAREFRAME_PROFILE=${SHAREFRAME_PROFILE} ==="
+
+    # A prod image must be deployable: matching profile, a trust anchor to verify
+    # updates, and a real root login. Fail fast before the long build.
+    if [ "${SHAREFRAME_BUILD_MODE}" = prod ]; then
+        [ "${SHAREFRAME_PROFILE}" = prod ] || {
+            echo "buildroot: prod build requires SHAREFRAME_PROFILE=prod (got '${SHAREFRAME_PROFILE}')" >&2; return 1; }
+        [ -n "${SHAREFRAME_ROOT_PASSWD:-}" ] || {
+            echo "buildroot: prod build requires SHAREFRAME_ROOT_PASSWD (set it in config.env)" >&2; return 1; }
+        [ -n "$config_dir" ] && [ -f "$config_dir/overlay/etc/rauc/ca.cert.pem" ] || {
+            echo "buildroot: prod build requires the CA cert at $config_dir/overlay/etc/rauc/ca.cert.pem" >&2; return 1; }
+        grep -q "BEGIN CERTIFICATE" "$config_dir/overlay/etc/rauc/ca.cert.pem" || {
+            echo "buildroot: $config_dir/overlay/etc/rauc/ca.cert.pem is not a PEM certificate" >&2; return 1; }
+    fi
+
+    # Build identity, resolved up front so the rebuild guard runs before the long
+    # build. The staging step below reuses these.
+    local version="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
+    local label="${SHAREFRAME_CONFIG_LABEL:-default}-${version}"
+    local dir="artifacts/builds/$label"
+
+    # Never silently destroy a build that already carries signed bundles; bump the
+    # version (versions are unique) or remove the dir on purpose.
+    [ -z "$(ls -A "$dir/releases" 2>/dev/null)" ] || {
+        echo "buildroot: $dir already has signed releases — bump the version or 'rm -rf $dir' to rebuild" >&2; return 1; }
 
     echo "=== Download and extract Buildroot ==="
     local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
@@ -128,6 +165,7 @@ function buildroot() {
             "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
         echo "=== Second overlay: $(realpath "$config_dir/overlay") ==="
     fi
+    # Baked into rootfs /etc/shadow (not /data); every update overwrites it.
     if [ -n "${SHAREFRAME_ROOT_PASSWD:-}" ]; then
         printf 'BR2_TARGET_GENERIC_ROOT_PASSWD="%s"\n' "$SHAREFRAME_ROOT_PASSWD" >> "$src_dir/.config"
         echo "=== Root password: set from config ==="
@@ -160,37 +198,65 @@ function buildroot() {
     # Drop stale secret seeds: TARGET_DIR persists across incremental builds;
     # the active overlay (or the tracked .template) re-creates them.
     rm -f "$src_dir/output/target/usr/share/shareframe/.env.secrets.toml.default" \
-          "$src_dir/output/target/usr/share/shareframe/wpa_supplicant.conf.default"
+          "$src_dir/output/target/usr/share/shareframe/wpa_supplicant.conf.default" \
+          "$src_dir/output/target/usr/share/shareframe/ap.conf.default"
 
     make -C "$src_dir" -j"$(nproc)"
 
     echo "=== Extract generated files ==="
     local img="$src_dir/output/images"
-    local artifact_label="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
 
-    rm -rf "artifacts/deploy/$artifact_label" "artifacts/sdcard/$artifact_label"
-    mkdir -p "artifacts/deploy/$artifact_label" "artifacts/sdcard/$artifact_label"
+    # Self-contained per build; release reads here, not the live tree, so a later
+    # build can't clobber an earlier build's release inputs.
+    rm -rf "$dir"
+    mkdir -p "$dir/qemu"
 
-    # artifacts/deploy/<label>/: individual artifacts (QEMU, debugging).
-    cp "$img/zImage"                  "artifacts/deploy/$artifact_label/"
-    cp "$img/bcm2835-rpi-zero-w.dtb"  "artifacts/deploy/$artifact_label/"
-    [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" "artifacts/deploy/$artifact_label/"
-    cp "$img/rootfs.squashfs"         "artifacts/deploy/$artifact_label/"
-    cp "$img/initramfs.cpio.gz"       "artifacts/deploy/$artifact_label/"
-    ln -sfn "$artifact_label" artifacts/deploy/latest
+    # Release inputs.
+    cp "$img/rootfs.squashfs" "$dir/rootfs.squashfs"
+    tar -C "$img/bootslot-tree" -cf "$dir/boot.tar" .
 
-    # artifacts/sdcard/<label>/: full SD image (one dd writes all partitions).
+    # Flash image (one dd writes all partitions).
     if [ -f "$img/sdcard.img" ]; then
-        cp "$img/sdcard.img" "artifacts/sdcard/$artifact_label/"
+        cp "$img/sdcard.img" "$dir/sdcard.img"
     else
         echo "WARN: sdcard.img not found — post-image.sh or genimage failed?"
     fi
-    ln -sfn "$artifact_label" artifacts/sdcard/latest
 
-    echo "=== Inspect (${artifact_label}) ==="
-    file "$(realpath "artifacts/deploy/$artifact_label/zImage")"
-    [ -f "artifacts/deploy/$artifact_label/rootfs.squashfs" ] && file "$(realpath "artifacts/deploy/$artifact_label/rootfs.squashfs")"
-    [ -f "artifacts/sdcard/$artifact_label/sdcard.img" ] && file "$(realpath "artifacts/sdcard/$artifact_label/sdcard.img")"
+    # QEMU / debugging bits.
+    cp "$img/zImage"                  "$dir/qemu/"
+    cp "$img/bcm2835-rpi-zero-w.dtb"  "$dir/qemu/"
+    [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" "$dir/qemu/"
+    cp "$img/initramfs.cpio.gz"       "$dir/qemu/"
+
+    # secrets=true if the config baked per-device seeds (per-device build); release
+    # refuses to OTA such a build to a group.
+    local secrets=false f
+    for f in "$config_dir"/overlay/usr/share/shareframe/*.default; do
+        [ -e "$f" ] && { secrets=true; break; }
+    done
+
+    # Manifest: release reads version, mode and secrets from here.
+    cat > "$dir/build.json" <<EOF
+{
+  "label": "${label}",
+  "config": "${SHAREFRAME_CONFIG_LABEL:-default}",
+  "version": "${version}",
+  "build_sha": "${BUILD_SHA:-unknown}",
+  "build_mode": "${SHAREFRAME_BUILD_MODE:-prod}",
+  "profile": "${SHAREFRAME_PROFILE:-prod}",
+  "epd": "${SHAREFRAME_EPD:-OFF}",
+  "secrets": ${secrets},
+  "built_at": "$(date --iso-8601=seconds)",
+  "built_by": "$(whoami)@$(hostname)"
+}
+EOF
+
+    ln -sfn "$label" artifacts/builds/latest
+
+    echo "=== Inspect (${label}) ==="
+    file "$(realpath "$dir/qemu/zImage")"
+    file "$(realpath "$dir/rootfs.squashfs")"
+    [ -f "$dir/sdcard.img" ] && file "$(realpath "$dir/sdcard.img")"
 }
 
 function qemu_rpi0() {
@@ -202,9 +268,9 @@ function qemu_rpi0() {
         -M raspi0 \
         -nographic \
         -serial null -serial mon:stdio \
-        -kernel artifacts/deploy/latest/zImage \
-        -dtb artifacts/deploy/latest/bcm2835-rpi-zero-w.dtb \
-        -initrd artifacts/deploy/latest/initramfs.cpio.gz \
+        -kernel artifacts/builds/latest/qemu/zImage \
+        -dtb artifacts/builds/latest/qemu/bcm2835-rpi-zero-w.dtb \
+        -initrd artifacts/builds/latest/qemu/initramfs.cpio.gz \
         -append "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/ram0 rw initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init"
 }
 
@@ -272,19 +338,29 @@ function clean() {
 function build() {
   echo "=== Build ==="
 
-  # usage: ./automation.sh build [configs/<customer>] [--version X.Y.Z]
-  local config_dir="" version=""
+  # usage: ./automation.sh build [configs/per-device/<dev>|configs/fleet/<env>] [--release <name>|--version X.Y.Z]
+  local config_dir="" version="" release=""
   while [ $# -gt 0 ]; do
       case "$1" in
           --version) version="$2"; shift 2 ;;
+          --release) release="$2"; shift 2 ;;
           *) config_dir="$1"; shift ;;
       esac
   done
 
-  if [ -n "$version" ]; then
-      validate_version "$version"
-      export SHAREFRAME_VERSION="$version"
-      echo "=== Version: $version ==="
+  [ -n "$version" ] && [ -n "$release" ] && {
+      echo "build: --version and --release are mutually exclusive" >&2; return 1; }
+
+  # --release: the version is read from the release config (single source).
+  if [ -n "$release" ]; then
+      local rel_dir
+      rel_dir="$(resolve_release_dir "$release")" || return 1
+      [ -f "$rel_dir/config.env" ] || { echo "build: '$rel_dir/config.env' not found" >&2; return 1; }
+      # shellcheck disable=SC1090,SC1091
+      set -a; . "$rel_dir/config.env"; set +a
+      version="${SHAREFRAME_VERSION:-}"
+      [ -n "$version" ] || { echo "build: '$rel_dir/config.env' sets no SHAREFRAME_VERSION" >&2; return 1; }
+      echo "=== Release config: $rel_dir (version $version) ==="
   fi
 
   if [ -n "$config_dir" ]; then
@@ -294,7 +370,20 @@ function build() {
       echo "=== Config: $config_dir ==="
       # shellcheck disable=SC1090,SC1091
       set -a; . "$config_dir/config.env"; set +a
+      # Identity falls back to the dir name when config.env left the label unset.
+      export SHAREFRAME_CONFIG_LABEL="${SHAREFRAME_CONFIG_LABEL:-$(basename "$config_dir")}"
   fi
+
+  # Bake the version last so neither config nor release env can shadow it.
+  if [ -n "$version" ]; then
+      validate_version "$version"
+      export SHAREFRAME_VERSION="$version"
+      echo "=== Version: $version ==="
+  fi
+
+  # Argless build = QEMU/dev iteration; default to dev so the prod guards (cert,
+  # password) don't block it. A config build or an explicit env override stays put.
+  [ -z "$config_dir" ] && [ -z "${SHAREFRAME_BUILD_MODE:-}" ] && export SHAREFRAME_BUILD_MODE=dev
 
   local sha
   sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -316,30 +405,49 @@ function connect_serial() {
 }
 
 function release() {
-    # usage: ./automation.sh release <dev|prod> --version X.Y.Z [--criticality C] [--notes FILE]
+    # usage: ./automation.sh release <dev|prod> [--release <name>] [--from <label>] [--notes FILE]
+    # Signs a stored build (artifacts/builds/<label>/); run it dev+prod or later,
+    # never rebuilds. Version comes from the build; --release adds criticality/notes/hooks.
     local mode="${1:-dev}"; shift || true
-    local version=""
-    local args=()
+    local release="" from="latest" notes=""
     while [ $# -gt 0 ]; do
         case "$1" in
-            --version) version="$2"; shift 2 ;;
-            *) args+=("$1"); shift ;;
+            --release) release="$2"; shift 2 ;;
+            --from)    from="$2"; shift 2 ;;
+            --notes)   notes="$2"; shift 2 ;;
+            *) echo "release: unknown arg '$1'" >&2; return 1 ;;
         esac
     done
 
-    [ -n "$version" ] || { echo "release: --version required" >&2; return 1; }
-    validate_version "$version"
-    [ -d "releases/${version}" ] || { echo "release: releases/${version}/ not found — create it first" >&2; return 1; }
-    [ -f build/buildroot/output/images/rootfs.squashfs ] || {
-        echo "release: no build found — run ./automation.sh build --version ${version} [configs/...] first" >&2; return 1; }
+    local build_dir="artifacts/builds/${from}"
+    [ -d "$build_dir" ] || { echo "release: build '${from}' not found in artifacts/builds/ — run build first" >&2; return 1; }
+    [ -f "$build_dir/build.json" ] || { echo "release: $build_dir/build.json missing" >&2; return 1; }
+
+    # Guard the leak rule + prod integrity from the build manifest.
+    local b_secrets b_mode
+    b_secrets="$(sed -n 's/.*"secrets": *\([a-z]*\).*/\1/p' "$build_dir/build.json")"
+    b_mode="$(sed -n 's/.*"build_mode": *"\([^"]*\)".*/\1/p' "$build_dir/build.json")"
+    [ "$b_secrets" = true ] && {
+        echo "release: '${from}' is a per-device build (baked secret seeds); never OTA it to a group — release a fleet build" >&2; return 1; }
+    [ "$mode" = prod ] && [ "$b_mode" != prod ] && {
+        echo "release: prod release needs a prod-mode build ('${from}' is build_mode=${b_mode})" >&2; return 1; }
+
+    local args=(--mode "$mode" --from "$build_dir")
+    if [ -n "$release" ]; then
+        local rel_dir
+        rel_dir="$(resolve_release_dir "$release")" || return 1
+        [ -f "$rel_dir/config.env" ] || { echo "release: '$rel_dir/config.env' not found" >&2; return 1; }
+        args+=(--release-dir "$rel_dir")
+    fi
+    [ -n "$notes" ] && args+=(--notes "$notes")
 
     case "$mode" in
         dev)
-            echo "=== Release ${version} (dev) ==="
-            scripts/make-release.sh --mode dev --version "$version" "${args[@]}"
+            echo "=== Release ${from} (dev) ==="
+            scripts/make-release.sh "${args[@]}"
             ;;
         prod)
-            echo "=== Release ${version} (prod) ==="
+            echo "=== Release ${from} (prod) ==="
             local keydir="${SHAREFRAME_RELEASE_KEYDIR:-$HOME/.shareframe-release-keys}"
             : "${SHAREFRAME_RELEASE_CERT:=$keydir/cert.pem}"
             : "${SHAREFRAME_RELEASE_KEY:=$keydir/key.pem}"
@@ -347,7 +455,7 @@ function release() {
                 echo "release: prod keys missing in $keydir (scripts/gen-prod-keys.sh)" >&2; return 1; }
             SHAREFRAME_RELEASE_CERT="$SHAREFRAME_RELEASE_CERT" \
             SHAREFRAME_RELEASE_KEY="$SHAREFRAME_RELEASE_KEY" \
-            scripts/make-release.sh --mode prod --version "$version" "${args[@]}"
+            scripts/make-release.sh "${args[@]}"
             ;;
         *)
             echo "release: mode must be dev or prod" >&2
