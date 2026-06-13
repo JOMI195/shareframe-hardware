@@ -2,7 +2,7 @@
 
 # Shareframe (Hardware)
 
-Shareframe-Board is the custom embedded Linux operating system that runs on the Shareframe e-paper picture frames. It is a Buildroot-built firmware image for the Raspberry Pi Zero W: a read-only squashfs root filesystem, s6 as PID 1, and signed A/B over-the-air updates via RAUC on top of the Raspberry Pi tryboot mechanism. At runtime the board connects to the Shareframe web server over a WebSocket, receives the photos shared to it, and renders them on the e-paper panel as a slideshow.
+Shareframe-Board is the custom embedded Linux operating system that runs on the Shareframe e-paper picture frames. It is a Buildroot-built firmware image for the Raspberry Pi Zero W with a read-only squashfs root filesystem, s6 as PID 1, and signed A/B over-the-air updates via RAUC on top of the Raspberry Pi tryboot mechanism. At runtime the board connects to the Shareframe web server over a WebSocket, receives the photos shared to it, and renders them on the e-paper panel as a slideshow.
 
 ## Related repos
 
