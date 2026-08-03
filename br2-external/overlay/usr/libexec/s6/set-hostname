@@ -1,0 +1,7 @@
+#!/bin/sh
+# Per-device hostname from the Pi serial, so multiple boards coexist on one LAN.
+# Suffix derivation must stay identical to seed-ap-config (mDNS name == AP SSID).
+serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+[ -n "$serial" ] || exit 0   # no serial: keep the build-time /etc/hostname fallback
+suffix="$(printf '%s' "$serial" | tail -c 4 | tr 'a-f' 'A-F')"
+hostname "shareframe-board-${suffix}"

@@ -1,0 +1,35 @@
+#!/bin/sh
+# Admin CLI for the factory store (p5): the durable per-device defaults that a
+# factory reset restores. set = update the store, not the live /data state.
+set -e
+DEV=/dev/mmcblk0p5
+STAGED=/run/shareframe/factory
+MNT=/run/shareframe/factory-rw
+
+usage() { echo "usage: shareframe-factory list | get <name> | set <name> <file>" >&2; exit 2; }
+[ "$(id -u)" = 0 ] || { echo "shareframe-factory: must run as root" >&2; exit 1; }
+
+case "${1:-}" in
+	list)
+		ls -l "$STAGED" 2>/dev/null || echo "shareframe-factory: nothing staged" >&2
+		;;
+	get)
+		[ -n "${2:-}" ] || usage
+		cat "$STAGED/$2"
+		;;
+	set)
+		[ -n "${2:-}" ] && [ -f "${3:-}" ] || usage
+		mkdir -p "$MNT"
+		mount -t vfat "$DEV" "$MNT"
+		trap 'umount "$MNT" 2>/dev/null || true' EXIT
+		cp "$3" "$MNT/$2"
+		sync
+		umount "$MNT"
+		trap - EXIT
+		# refresh the staged copy so consumers see the new default this boot
+		mkdir -p "$STAGED" && chmod 0700 "$STAGED"
+		cp "$3" "$STAGED/$2"
+		echo "shareframe-factory: $2 updated (takes effect as default; live state unchanged)"
+		;;
+	*) usage ;;
+esac

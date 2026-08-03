@@ -72,10 +72,10 @@ wpa_supplicant.conf.default
 br2-external/package/shareframe-rauc/files/*.pem
 br2-external/package/shareframe-rauc/files/*.srl
 
-# Deploy configs (privat): configs/per-device/<name>/ (Initial-Flash, mit
-# Secrets) und configs/fleet/<env>/ (OTA-Updates, nur CA-Cert). Nur die beiden
+# Deploy configs (privat): configs/per-device/<name>/ (factory/-Provisionierung,
+# mit Secrets) und configs/fleet/<env>/ (Builds/OTA, nur CA-Cert). Nur die beiden
 # example-Templates sind getrackt; die Negation muss UNTER den Secret-Patterns
-# oben stehen (spaetere Regel gewinnt), damit example/.../.default re-included wird.
+# oben stehen (spaetere Regel gewinnt), damit example/factory/* re-included wird.
 configs/*
 !configs/per-device/
 configs/per-device/*

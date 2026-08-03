@@ -37,6 +37,10 @@ define SHAREFRAME_INIT_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 0755 $(@D)/skel/halt     $(TARGET_DIR)/sbin/halt
 	$(INSTALL) -m 0755 $(@D)/skel/shutdown $(TARGET_DIR)/sbin/shutdown
 
+	# 3c) passwd wrapper: persist root's hash to /data (tmpfs /etc/shadow)
+	rm -f $(TARGET_DIR)/usr/bin/passwd
+	$(INSTALL) -m 0755 $(@D)/skel/passwd $(TARGET_DIR)/usr/bin/passwd
+
 	# 4) host/target path symlinks (execlineb in /bin, oneshot-run in /libexec)
 	ln -sf /bin/execlineb $(TARGET_DIR)/usr/bin/execlineb
 	mkdir -p $(TARGET_DIR)/usr/libexec

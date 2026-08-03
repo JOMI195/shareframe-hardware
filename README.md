@@ -15,7 +15,7 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 - s6 supervised services with ordered startup
 - Signed A/B over-the-air updates (RAUC + tryboot) with automatic rollback on a failed slot
 - USB-gadget networking for development plus WiFi with a STA → AP fallback so the board is always reachable
-- Local management dashboard served on the board itself, discoverable at `shareframe-board.local`
+- Local management dashboard served on the board itself, discoverable at `shareframe-board-<XXXX>.local` (per-device suffix derived from the board serial, matching its WiFi AP SSID; shown in the login banner) so multiple boards coexist on one network
 
 ## Project
 
@@ -63,7 +63,7 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 
 - **nginx :80**: Serves the local board management dashboard and proxies its requests.
 - **dropbear**: Lightweight SSH server for remote access.
-- **avahi**: mDNS hostname resolution on the local network (`shareframe-board.local`).
+- **avahi**: mDNS hostname resolution on the local network (`shareframe-board-<XXXX>.local`, unique per device).
 - **ntpd, watchdog, earlyoom, crond, getty, …**: Supporting system daemons — time sync, hardware watchdog, out-of-memory protection, scheduled jobs, and console login.
 
 **Application (shareframe-board)**:
@@ -84,4 +84,5 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 
 - **p1 — FAT boot**: Raspberry Pi firmware, A/B `os_prefix` directories, and `config.txt` / `tryboot.txt`.
 - **p2 / p3 — squashfs rootfs A/B**: The two read-only root filesystem slots used by A/B updates.
-- **p4 — f2fs /data**: Writable partition holding per-device state and secrets.
+- **p5 — vfat factory**: Durable per-device defaults (identity, WiFi, root password), injected at flash time by `scripts/provision-device.sh`; never touched by updates, restored by `shareframe-factory-reset`.
+- **p6 — f2fs /data**: Writable partition for per-device state and secrets; grows to the card size on first boot.

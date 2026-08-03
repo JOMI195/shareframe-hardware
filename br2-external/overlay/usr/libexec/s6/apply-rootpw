@@ -1,0 +1,17 @@
+#!/bin/sh
+# /etc/shadow is tmpfs, reset to the squashfs-baked value each boot; re-apply
+# the persisted per-device hash so fleet updates can't revert root.
+set -e
+DEST=/data/shareframe/rootpw
+SRC=/run/shareframe/factory/rootpw
+
+if [ ! -f "$DEST" ] && [ -s "$SRC" ]; then
+	cp "$SRC" "$DEST"
+	chmod 0600 "$DEST"
+fi
+[ -s "$DEST" ] || exit 0
+
+h="$(cat "$DEST")"
+awk -F: -v h="$h" 'BEGIN{OFS=":"} $1=="root"{$2=h} {print}' /etc/shadow > /etc/shadow.new
+chmod 0600 /etc/shadow.new
+mv /etc/shadow.new /etc/shadow

@@ -3,6 +3,8 @@ mdev-netlink
 setup-led
 expand-data
 mount-data
+stage-factory
+apply-rootpw
 bind-persistent-state
 fake-hwclock-restore
 fake-hwclock-save

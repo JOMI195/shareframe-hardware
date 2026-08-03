@@ -1,0 +1,12 @@
+#!/bin/sh
+# Stage factory defaults from p5 (ro) into /run for the seed scripts.
+# Schema-free: every file on p5 lands in /run/shareframe/factory/.
+set -e
+DEST=/run/shareframe/factory
+MNT=/run/shareframe/factory-ro
+mkdir -p "$DEST" "$MNT"
+chmod 0700 "$DEST"
+if mount -t vfat -o ro /dev/mmcblk0p5 "$MNT" 2>/dev/null; then
+	cp -r "$MNT/." "$DEST/" 2>/dev/null || true
+	umount "$MNT"
+fi

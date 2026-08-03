@@ -64,6 +64,18 @@ rm -f "${BINARIES_DIR}/boot.vfat"
 "${MCOPY}" -i "${BINARIES_DIR}/boot.vfat" -spQ "${TREE}"/* ::/
 echo "post-image: boot.vfat built (mode=${MODE})"
 
+# Factory store (p5): durable per-device defaults; provision-device.sh injects
+# secrets later. Ships the baked root hash so every card has a durable pw.
+FACTORY_TREE="${BINARIES_DIR}/factory-tree"
+rm -rf "${FACTORY_TREE}"
+mkdir -p "${FACTORY_TREE}"
+awk -F: '$1=="root"{print $2}' "${TARGET_DIR}/etc/shadow" > "${FACTORY_TREE}/rootpw"
+[ -s "${FACTORY_TREE}/rootpw" ] || { echo "post-image: no root hash in shadow" >&2; exit 1; }
+rm -f "${BINARIES_DIR}/factory.vfat"
+"${MKFS_VFAT}" -C -n FACTORY "${BINARIES_DIR}/factory.vfat" 32768 >/dev/null
+"${MCOPY}" -i "${BINARIES_DIR}/factory.vfat" -spQ "${FACTORY_TREE}"/* ::/
+echo "post-image: factory.vfat built"
+
 ROOTPATH_TMP="$(mktemp -d)"
 trap 'rm -rf "${ROOTPATH_TMP}"' EXIT
 rm -rf "${GENIMAGE_TMP}"

@@ -195,12 +195,6 @@ function buildroot() {
         make -C "$src_dir" "$(basename "$mk" .mk)-reconfigure"
     done
 
-    # Drop stale secret seeds: TARGET_DIR persists across incremental builds;
-    # the active overlay (or the tracked .template) re-creates them.
-    rm -f "$src_dir/output/target/usr/share/shareframe/.env.secrets.toml.default" \
-          "$src_dir/output/target/usr/share/shareframe/wpa_supplicant.conf.default" \
-          "$src_dir/output/target/usr/share/shareframe/ap.conf.default"
-
     make -C "$src_dir" -j"$(nproc)"
 
     echo "=== Extract generated files ==="
@@ -228,14 +222,7 @@ function buildroot() {
     [ -f "$img/spi0-spidev.dtbo" ] && cp "$img/spi0-spidev.dtbo" "$dir/qemu/"
     cp "$img/initramfs.cpio.gz"       "$dir/qemu/"
 
-    # secrets=true if the config baked per-device seeds (per-device build); release
-    # refuses to OTA such a build to a group.
-    local secrets=false f
-    for f in "$config_dir"/overlay/usr/share/shareframe/*.default; do
-        [ -e "$f" ] && { secrets=true; break; }
-    done
-
-    # Manifest: release reads version, mode and secrets from here.
+    # Manifest: release reads version and mode from here.
     cat > "$dir/build.json" <<EOF
 {
   "label": "${label}",
@@ -245,7 +232,6 @@ function buildroot() {
   "build_mode": "${SHAREFRAME_BUILD_MODE:-prod}",
   "profile": "${SHAREFRAME_PROFILE:-prod}",
   "epd": "${SHAREFRAME_EPD:-OFF}",
-  "secrets": ${secrets},
   "built_at": "$(date --iso-8601=seconds)",
   "built_by": "$(whoami)@$(hostname)"
 }
@@ -338,7 +324,9 @@ function clean() {
 function build() {
   echo "=== Build ==="
 
-  # usage: ./automation.sh build [configs/per-device/<dev>|configs/fleet/<env>] [--release <name>|--version X.Y.Z]
+  # usage: ./automation.sh build [configs/fleet/<env>|<config-dir>] [--release <name>|--version X.Y.Z]
+  # Per-device identity is NOT baked anymore — flash images come from
+  # scripts/provision-device.sh on top of a fleet build.
   local config_dir="" version="" release=""
   while [ $# -gt 0 ]; do
       case "$1" in
@@ -423,12 +411,9 @@ function release() {
     [ -d "$build_dir" ] || { echo "release: build '${from}' not found in artifacts/builds/ — run build first" >&2; return 1; }
     [ -f "$build_dir/build.json" ] || { echo "release: $build_dir/build.json missing" >&2; return 1; }
 
-    # Guard the leak rule + prod integrity from the build manifest.
-    local b_secrets b_mode
-    b_secrets="$(sed -n 's/.*"secrets": *\([a-z]*\).*/\1/p' "$build_dir/build.json")"
+    # Guard prod integrity from the build manifest.
+    local b_mode
     b_mode="$(sed -n 's/.*"build_mode": *"\([^"]*\)".*/\1/p' "$build_dir/build.json")"
-    [ "$b_secrets" = true ] && {
-        echo "release: '${from}' is a per-device build (baked secret seeds); never OTA it to a group — release a fleet build" >&2; return 1; }
     [ "$mode" = prod ] && [ "$b_mode" != prod ] && {
         echo "release: prod release needs a prod-mode build ('${from}' is build_mode=${b_mode})" >&2; return 1; }
 

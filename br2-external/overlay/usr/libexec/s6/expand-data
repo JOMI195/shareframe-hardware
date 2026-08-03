@@ -1,19 +1,22 @@
 #!/bin/sh
-# First boot: grow /data (p4) to end of card. Runs before mount-data.
+# First boot: grow /data (logical p6, inside extended p4) to end of card.
+# Runs before mount-data.
 set -e
 DISK=/dev/mmcblk0
-PART=/dev/mmcblk0p4
+PART=/dev/mmcblk0p6
 
 disk_sectors=$(cat /sys/block/mmcblk0/size)
-part_start=$(cat /sys/block/mmcblk0/mmcblk0p4/start)
-part_size=$(cat /sys/block/mmcblk0/mmcblk0p4/size)
+part_start=$(cat /sys/block/mmcblk0/mmcblk0p6/start)
+part_size=$(cat /sys/block/mmcblk0/mmcblk0p6/size)
 part_end=$((part_start + part_size))
 
 # Within 16MiB of the end already -> expanded (or card exactly fits).
 [ $((disk_sectors - part_end)) -lt 32768 ] && exit 0
 
-echo "expand-data: growing p4 to end of card (${disk_sectors} sectors)"
+echo "expand-data: growing p4+p6 to end of card (${disk_sectors} sectors)"
+# The extended container (p4) must grow before the logical inside it.
 echo ", +" | sfdisk --no-reread --force -N 4 "$DISK"
+echo ", +" | sfdisk --no-reread --force -N 6 "$DISK"
 partx -u "$DISK"
 resize.f2fs "$PART" || {
 	echo "expand-data: resize.f2fs failed; fsck then retry once"

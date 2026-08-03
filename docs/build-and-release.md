@@ -14,34 +14,15 @@ leak between builds. Two kinds, by lifecycle:
 
 | Dir | For | Carries | Used |
 |-----|-----|---------|------|
-| `configs/per-device/<board>/` | initial SD flash of one board | CA cert **+** that board's secret seeds (`.env`, Wi-Fi, AP) | once per device |
-| `configs/fleet/<env>/` | OTA updates to a whole group | CA cert **only** (credless) | every release build |
+| `configs/fleet/<env>/` | **every build** (flash + OTA) | CA cert only (credless) | once per release |
+| `configs/per-device/<board>/` | provisioning one board's flash image | that board's `factory/` files (identity, Wi-Fi, root pw) | once per device, **no build** |
 
-**Why the split:** the config overlay is baked into the rootfs squashfs, and the
-squashfs ships inside every OTA bundle. A per-device config's secret seeds would
-therefore be distributed to the whole assigned group. So updates are built from a
-fleet config (no secret seeds); per-device secrets live only on each board's
-`/data` and survive updates untouched.
+**One build serves all devices.** The rootfs is always fleet-generic; per-device
+identity lives on the **factory partition (p5)** and on `/data` — never in the
+squashfs. `scripts/provision-device.sh` turns a fleet `sdcard.img` into a
+device's flash image in seconds by injecting its `factory/` files into p5.
 
-### Per-device (initial flash)
-
-```sh
-cp -r configs/per-device/example configs/per-device/<board>
-$EDITOR configs/per-device/<board>/config.env     # mode / profile / label / paths
-# put real secrets + Wi-Fi into overlay/usr/share/shareframe/*.default and the
-# CA cert into overlay/etc/rauc/ca.cert.pem (see that dir's README), then:
-./automation.sh build configs/per-device/<board> --release <release>
-# flash artifacts/builds/<board>-<version>/sdcard.img — once per board.
-```
-
-`<board>` (the config dir) becomes the build label; `<release>` is the release dir
-`releases/<release>/`, whose `config.env` holds the version that gets baked — the
-version itself is never typed here. Flash at the current fleet version so the board
-boots up-to-date and waits for the next release. The seeds are copied to `/data`
-on first boot only if absent (idempotent), so the board keeps its identity/Wi-Fi
-across reboots and A/B updates.
-
-### Fleet (OTA updates)
+### Fleet (the only build input)
 
 ```sh
 cp -r configs/fleet/example configs/fleet/<env>
@@ -50,32 +31,45 @@ cp ~/.shareframe-release-keys/ca.cert.pem configs/fleet/<env>/overlay/etc/rauc/c
 ./automation.sh build configs/fleet/<env> --release <release>
 ```
 
-Without an argument (`./automation.sh build`) the tracked defaults and the
-credless `.template` seeds are used, and the build defaults to **dev mode** (so the
-prod guards don't apply) — handy for QEMU, but it lacks the prod CA so prod boards
-reject those bundles.
+Without an argument (`./automation.sh build`) the tracked defaults are used and
+the build defaults to **dev mode** (so the prod guards don't apply) — handy for
+QEMU, but it lacks the prod CA so prod boards reject those bundles.
 
-### What a config dir holds
+### Per-device (provision, no rebuild)
+
+```sh
+cp -r configs/per-device/example configs/per-device/<board>
+$EDITOR configs/per-device/<board>/factory/*      # identity, Wi-Fi, AP
+scripts/provision-device.sh --device configs/per-device/<board> [--root-passwd]
+dd if=artifacts/flash/<board>-<version>.img of=/dev/sdX bs=4M conv=fsync
+```
+
+`--from <label>` picks a stored build (default `latest`); `--root-passwd` prompts
+and writes the crypt hash to `factory/rootpw`. The factory files are seeded to
+`/data` on first boot only if absent (idempotent), so the board keeps its
+identity/Wi-Fi across reboots, A/B updates — and a factory reset restores exactly
+these files.
+
+### What the dirs hold
 
 | Path | Role |
 |------|------|
-| `config.env` | Sourced by `automation.sh`: build mode, profile, optional override paths, config label (`SHAREFRAME_CONFIG_LABEL`; defaults to the dir name). |
-| `overlay/etc/rauc/ca.cert.pem` | Trust anchor — both kinds need it so boards verify update signatures. |
-| `overlay/usr/share/shareframe/*.default` | **Per-device only.** Secret seeds copied to `/data` on first boot. Never in a fleet config. |
+| `fleet/<env>/config.env` | Sourced by `automation.sh`: build mode, profile, optional override paths, config label. |
+| `fleet/<env>/overlay/etc/rauc/ca.cert.pem` | Trust anchor — boards verify update signatures against it. |
+| `per-device/<board>/factory/.env.secrets.toml` | Device identity (required). |
+| `per-device/<board>/factory/{wpa_supplicant.conf,ap.conf,rootpw}` | Optional Wi-Fi / AP / root-pw defaults. |
 
-Seed scripts on the device look for the private `.default` seed files in the
-overlay; if one is missing they fall back to the tracked `.template`.
+Seed scripts on the device read the staged factory store
+(`/run/shareframe/factory/`, from p5); if a file is missing they fall back to the
+tracked `.template` (AP config: derived from the board serial).
 
-### How it works
+### How a build works
 
 - `config.env` is exported before the build; build mode / profile are validated.
 - The dir's `overlay/` is the **second** `BR2_ROOTFS_OVERLAY`, so it overrides and
   extends the tracked one.
 - Override paths go into Buildroot's `local.mk`, rewritten every build so no
   override sticks across runs.
-- Known secret seeds are wiped from the target before each build, so a fleet build
-  ships only credless `.template` seeds and one device's credentials can't leak
-  into the next build.
 
 ### git
 
@@ -93,9 +87,9 @@ credless templates; every other `configs/per-device/<board>/` and
 
 `--release` reads the version from `releases/<release>/config.env`; `--version`
 sets it directly (mutually exclusive). The version is baked into the rootfs
-(`/etc/shareframe-release`, RAUC manifest) — it is the build's identity, the same
-whether the build is per-device or fleet. Omit both and it falls back to the git
-SHA (QEMU/dev only; a fielded board needs a real semver for the server compare).
+(`/etc/shareframe-release`, RAUC manifest) — it is the build's identity. Omit
+both and it falls back to the git SHA (QEMU/dev only; a fielded board needs a
+real semver for the server compare).
 
 A **prod build** (`SHAREFRAME_BUILD_MODE=prod`, the default) aborts up front unless
 all three hold: `SHAREFRAME_PROFILE=prod`, `SHAREFRAME_ROOT_PASSWD` set, and a PEM
@@ -107,13 +101,14 @@ Each build lands in its own dir, keyed `<label>-<version>` (label =
 
 ```
 artifacts/builds/<label>-<version>/
-  build.json        config, version, sha, mode, profile, epd, secrets, built_at/by
+  build.json        config, version, sha, mode, profile, epd, built_at/by
   rootfs.squashfs   release input + qemu
   boot.tar          release input
-  sdcard.img        flash
+  sdcard.img        flash input (provision-device.sh injects factory files)
   qemu/             zImage, dtb, dtbo, initramfs
   releases/         signed bundles (created by `release`)
 artifacts/builds/latest -> <label>-<version>
+artifacts/flash/<board>-<version>.img   provisioned per-device images
 ```
 
 Builds don't clobber each other, so several boards / versions coexist; `release`
@@ -139,13 +134,9 @@ without rebuilding.
   Back up the prod CA + signing keys — without them you can't sign updates existing
   boards will accept.
 
-> **Build updates from a fleet config** (`configs/fleet/<env>/`, CA cert only),
-> never a per-device config — its secret seeds would ship inside the bundle to the
-> whole group. Devices keep their own `/data` secrets regardless.
-
-This is enforced from the build manifest: `release` refuses a per-device build
-(`secrets: true` — would OTA secrets to the group), and a prod release refuses a
-non-prod-mode build.
+All builds are fleet builds (credless) — per-device secrets are never baked, so
+nothing can leak into a bundle. A prod release refuses a non-prod-mode build
+(checked from the build manifest).
 
 ### 1. Author the release dir
 
@@ -230,11 +221,53 @@ On a test board (group "test"):
 If the new version fails to boot, the board rolls back automatically ("Rolled
 back" in the history). Deactivate the release on the server and fix the cause.
 
+## Factory partition & factory reset
+
+The SD card layout: p1 boot FAT (A/B kernel slots), p2/p3 rootfs squashfs (RAUC
+A/B), p4 extended container, **p5 factory (vfat, 32M)**, p6 `/data` (f2fs, grows
+to card end on first boot).
+
+**p5 is the durable per-device store.** Updates never touch it (RAUC writes
+p2/p3 and the A/B subdirs on p1 only); a `/data` wipe doesn't either. On every
+boot `stage-factory` mounts p5 read-only and stages its files to
+`/run/shareframe/factory/`, where the seed scripts (and `apply-rootpw`) read
+them. The store is schema-free: any file dropped onto p5 gets staged — future
+per-device knobs need no new mechanism.
+
+**Root password:** the baked `/etc/shadow` hash is copied to `factory/rootpw` at
+image build; on first boot it's seeded to `/data/shareframe/rootpw`, and
+`apply-rootpw` re-applies it to the tmpfs `/etc/shadow` on every boot — so a
+fleet update can no longer revert root. `passwd` on the device persists the new
+hash to `/data` automatically (wrapper). `SHAREFRAME_ROOT_PASSWD` remains the
+baked fallback for un-provisioned cards.
+
+**Factory reset** (total wipe, SSH/serial):
+
+```sh
+shareframe-factory-reset --yes
+```
+
+Marks `/data`, reboots; `mount-data` reformats p6 on the way up, then the normal
+seed path repopulates identity from p5 — fresh SSH host keys, factory secrets,
+factory (or serial-derived) AP creds, factory root pw. The rootfs and the RAUC
+trust anchor are untouched, so the board still receives updates after a reset.
+A pending (uncommitted) update is discarded — intended.
+
+**Changing the store on a live board:**
+
+- SSH: `shareframe-factory list | get <name> | set <name> <file>` — `set` updates
+  the *defaults* (what a reset restores), not the live `/data` state.
+- Server-targeted update: assign a device-specific release whose `pre.sh` writes
+  `/data` (live half) and whose `post.sh` mounts p5 rw and writes the durable
+  half — see the commented recipe in `releases/example/{pre,post}.sh`. **The
+  bundle is signed but not encrypted** — key material rides readable inside it;
+  assign such a release strictly to the one target device.
+
 ## Watch out for
 
-- **Root password** is baked into the rootfs `/etc/shadow` (not `/data`), so every
-  update overwrites it fleet-wide. Set `SHAREFRAME_ROOT_PASSWD` on **every** fleet
-  build, or the update resets root to the Buildroot default (`"root"`).
+- **Root password**: persisted on `/data` and re-applied each boot (see above).
+  `SHAREFRAME_ROOT_PASSWD` is still required for prod builds as the baked
+  fallback, but updates no longer reset a provisioned board's password.
 - After a buildroot `clean`, `release` falls back to a **system `rauc`** and warns;
   the verity format may differ from the buildroot host rauc — rebuild if unsure.
 - **Key rotation order**: roll out the new CA cert first via a normal update (still

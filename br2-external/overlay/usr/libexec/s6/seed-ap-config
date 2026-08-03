@@ -1,15 +1,15 @@
 #!/bin/sh
 # Seed the AP-fallback credentials on first boot. Idempotent — never overwrites,
-# so a provisioned value survives reboots and A/B switches. Source order:
-# .default (provisioned), per-device derivation from the board serial, .template.
+# so a provisioned value survives reboots and A/B switches. Source order: staged
+# factory store (p5), per-device derivation from the board serial, .template.
 set -e
 DEST=/data/wifi/ap.conf
 
 mkdir -p /data/wifi
 [ -f "$DEST" ] && exit 0
 
-if [ -f /usr/share/shareframe/ap.conf.default ]; then
-	cp /usr/share/shareframe/ap.conf.default "$DEST"
+if [ -f /run/shareframe/factory/ap.conf ]; then
+	cp /run/shareframe/factory/ap.conf "$DEST"
 	chmod 0600 "$DEST"
 	exit 0
 fi

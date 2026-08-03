@@ -1,6 +1,6 @@
 #!/bin/sh
 # Seed the wifi config on first boot. Idempotent — never overwrites, so runtime
-# edits survive. Source order: .default (provisioned, gitignored) then .template.
+# edits survive. Source order: staged factory store (p5), then .template.
 set -e
 DEST=/data/wifi/wpa_supplicant.conf
 
@@ -11,7 +11,7 @@ if [ -f "$DEST" ]; then
 fi
 
 for src in \
-	/usr/share/shareframe/wpa_supplicant.conf.default \
+	/run/shareframe/factory/wpa_supplicant.conf \
 	/usr/share/shareframe/wpa_supplicant.conf.template
 do
 	if [ -f "$src" ]; then
