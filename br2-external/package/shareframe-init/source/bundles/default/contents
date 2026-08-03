@@ -11,6 +11,7 @@ fake-hwclock-save
 load-brcmfmac
 seed-wifi-config
 seed-ap-config
+setup-gadget
 setup-usb0
 udhcpd-usb0
 syslogd

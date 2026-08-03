@@ -1,0 +1,29 @@
+#!/bin/sh
+# USB gadget (usb0) via configfs. CDC-NCM: inbox drivers on Linux, macOS, Win11.
+set -e
+
+G=/sys/kernel/config/usb_gadget/shareframe
+[ -d "$G" ] && exit 0
+
+serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+[ -n "$serial" ] || serial=1
+mac="$(printf '00000000%s' "$serial" | tail -c 8 | sed 's/../&:/g; s/:$//')"
+
+mkdir -p "$G/strings/0x409" "$G/functions/ncm.usb0" "$G/configs/c.1/strings/0x409"
+
+echo 0x1d6b > "$G/idVendor"    # Linux Foundation
+echo 0x0104 > "$G/idProduct"   # Multifunction Composite Gadget
+echo 0x0200 > "$G/bcdUSB"
+echo Shareframe       > "$G/strings/0x409/manufacturer"
+echo Shareframe-Board > "$G/strings/0x409/product"
+echo "$serial"        > "$G/strings/0x409/serialnumber"
+
+# Serial-derived so the MAC, and the fe80:: address built from it, survive reboots.
+echo "02:5f:$mac" > "$G/functions/ncm.usb0/dev_addr"
+echo "06:5f:$mac" > "$G/functions/ncm.usb0/host_addr"
+
+echo "CDC NCM" > "$G/configs/c.1/strings/0x409/configuration"
+echo 250       > "$G/configs/c.1/MaxPower"
+ln -s "$G/functions/ncm.usb0" "$G/configs/c.1/ncm.usb0"
+
+ls /sys/class/udc | head -1 > "$G/UDC"

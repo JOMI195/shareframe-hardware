@@ -46,7 +46,7 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 
 **Hardware I/O**:
 
-- **usb0**: USB gadget (dwc2) interface used for ethernet-over-USB and serial access during development.
+- **usb0**: USB gadget (dwc2) interface providing ethernet-over-USB on the data port — plug any laptop in and reach the board over SSH.
 - **wlan0**: Onboard BCM43438 WiFi, the board's primary network link in normal operation.
 - **UART ttyS1**: Serial console for low-level debugging.
 - **SPI0**: Bus driving the e-paper panel.
@@ -57,7 +57,7 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 - **wifi-mode-manager**: Owns `wlan0` and switches it between station (STA) and access-point (AP) mode.
 - **wpa_supplicant + dhcpcd**: Default STA mode — connects to the configured home WiFi network.
 - **hostapd + dnsmasq**: AP fallback — opens a setup access point when no configured network is reachable.
-- **setup-usb0 + udhcpd**: Brings up the USB network; the board (10.55.0.1) hands a `.2` address to any connected device.
+- **setup-gadget + setup-usb0 + udhcpd**: Builds the CDC-NCM gadget (inbox drivers on Linux, macOS and Windows 11) and brings up the USB network. The board answers on `10.55.0.1` (handing the host `.2` via DHCP) and on a serial-derived `169.254.x.y` address, so hosts that only do IPv4 link-local reach it too — `ssh root@shareframe-board-<XXXX>.local` works with no host configuration.
 
 **System services**:
 

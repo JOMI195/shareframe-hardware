@@ -1,5 +1,21 @@
 #!/bin/sh
-# Static IP for the USB gadget link. Board = 10.55.0.1; partner gets 10.55.0.2 from udhcpd-usb0.
+# Board = 10.55.0.1; partner gets 10.55.0.2 from udhcpd-usb0. The 169.254 alias
+# reaches hosts that never run a DHCP client and only self-assign link-local.
 set -e
-ip addr add 10.55.0.1/24 dev usb0
+
+i=0
+while [ ! -e /sys/class/net/usb0 ] && [ "$i" -lt 30 ]; do
+	sleep 1
+	i=$((i + 1))
+done
+
+serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+suffix="$(printf '0000%s' "$serial" | tail -c 4)"
+o3=$((0x${suffix%??}))
+o4=$((0x${suffix#??}))
+# RFC 3927 usable range is 169.254.1.0-169.254.254.255.
+[ "$o3" -ge 1 ] && [ "$o3" -le 254 ] || o3=1
+
+ip addr replace 10.55.0.1/24 dev usb0
+ip addr replace "169.254.$o3.$o4/16" dev usb0
 ip link set usb0 up

@@ -12,6 +12,9 @@ mount -t tmpfs -o mode=0755,size=32m tmpfs /var
 mkdir -p /var/db/dhcpcd /var/lib/misc /var/log/nginx /var/log/shareframe /var/spool /var/empty /var/tmp
 chmod 1777 /var/tmp
 
+# setup-gadget builds the USB gadget (usb0) in here.
+mount -t configfs configfs /sys/kernel/config
+
 mkdir -p /run/lock /etc/cron/crontabs
 ln -sf /run      /var/run
 ln -sf /run/lock /var/lock
