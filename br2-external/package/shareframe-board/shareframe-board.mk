@@ -21,7 +21,7 @@ SHAREFRAME_PROFILE ?= prod
 SHAREFRAME_EPD ?= OFF
 
 # Outbound IP family (default AF_UNSPEC -> resolver decides). AF_INET forces IPv4.
-# Like SHAREFRAME_EPD, baked in at fetch time: changing it needs a dirclean.
+# Patched into the vendored IXWebSocket source; re-applies on reconfigure, no dirclean.
 SHAREFRAME_IP_FAMILY ?= AF_UNSPEC
 
 SHAREFRAME_BOARD_CONF_OPTS = \
