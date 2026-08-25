@@ -6,6 +6,33 @@ a release signs a chosen build into a `.raucb` the server ships to boards. Board
 install into the inactive A/B slot and boot via tryboot — a failed boot rolls back
 automatically.
 
+## The easy path: `scripts/deploy.sh`
+
+An interactive runner over the three steps below. It lists the configs, releases,
+builds and devices it finds on disk, prints the config behind every pick, shows
+the exact commands plus the paths they will produce, and only then runs them —
+so a wrong mode, a missing CA cert or a version mismatch fails in a second
+instead of after a build.
+
+```sh
+scripts/deploy.sh                      # menu: what do you want to do?
+scripts/deploy.sh --update  --config configs/fleet/<env> --release <rel> --mode prod
+scripts/deploy.sh --sdcard  --config configs/fleet/<env> --release <rel> --device <board>
+scripts/deploy.sh --steps release --from <label>-<version> --release <rel> --mode prod
+scripts/deploy.sh --steps image   --from <label>-<version> --device <board>
+```
+
+Flows: `--update` = build + release, `--sdcard` = build + image, `--full` = all
+three; `--steps build,release,image` picks them explicitly. Every prompt has a
+matching flag (`--config --release --version --device --from --mode`), so a run
+is repeatable; `--dry-run` stops at the summary, `--yes` skips the confirm. It
+never writes a block device — it prints the `dd` line, like `provision-device.sh`.
+
+`--steps release` / `--steps image` are the no-rebuild paths: they sign or
+provision from a build that already exists in `artifacts/builds/`.
+
+The rest of this document is the reference for what those steps actually do.
+
 ## Configs
 
 Configs bundle everything that changes between deployments, kept separate from the
