@@ -35,6 +35,9 @@ done
 json_str() { sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" "${FROM}/build.json"; }
 BUILD_VERSION="$(json_str version)"
 CONFIG="$(json_str config)"
+# Provenance: which hardware + app commits went into this bundle.
+OS_SHA="$(json_str os_sha)"
+APP_SHA="$(json_str app_sha)"
 
 # Release config (optional): version + criticality live in its config.env.
 if [ -n "${REL_DIR}" ]; then
@@ -169,6 +172,8 @@ cat > "${OUT_DIR}/release-${VERSION}-${MODE}.json" <<EOF
 {
   "version": "${VERSION}",
   "config": "${CONFIG}",
+  "os_sha": "${OS_SHA}",
+  "app_sha": "${APP_SHA}",
   "criticality": "${CRITICALITY}",
   "file": "$(basename "${OUT_BUNDLE}")",
   "sha256": "${SHA256}",

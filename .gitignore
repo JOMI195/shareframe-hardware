@@ -49,8 +49,9 @@ CMakeFiles/
 *.dSYM/
 *.su
 
-# Lokale Claude-Config — nie ins Studi-sichtbare Template
+# AI
 .claude/
+CLAUDE.md
 
 # Python bytecode (ci/check-files.py etc.)
 __pycache__/

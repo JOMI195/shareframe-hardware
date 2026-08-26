@@ -11,6 +11,12 @@ SHAREFRAME_BOARD_DEPENDENCIES = openssl sqlitecpp spdlog lgpio
 
 SHAREFRAME_BOARD_SUPPORTS_IN_SOURCE_BUILD = NO
 
+# App git sha, baked into the binaries. Read from the SITE (or the dev override),
+# never $(@D): the local rsync drops .git. automation.sh exports APP_SHA; the
+# $(shell) is the fallback for a bare `make`.
+SHAREFRAME_BOARD_SRC = $(or $(SHAREFRAME_BOARD_OVERRIDE_SRCDIR),$(SHAREFRAME_BOARD_SITE))
+SHAREFRAME_BOARD_APP_SHA = $(or $(APP_SHA),$(shell git -C $(SHAREFRAME_BOARD_SRC) describe --always --abbrev=7 --dirty --exclude='*' 2>/dev/null),unknown)
+
 # Config profile (default prod); threaded into CMake so only the selected config
 # overlay ships. Default keeps bare `make` working.
 SHAREFRAME_PROFILE ?= prod
@@ -29,6 +35,7 @@ SHAREFRAME_BOARD_CONF_OPTS = \
 	-DSHAREFRAME_IP_FAMILY=$(SHAREFRAME_IP_FAMILY) \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DBUILD_SHARED_LIBS=OFF \
-	-DSHAREFRAME_PROFILE=$(SHAREFRAME_PROFILE)
+	-DSHAREFRAME_PROFILE=$(SHAREFRAME_PROFILE) \
+	-DSHAREFRAME_APP_SHA=$(SHAREFRAME_BOARD_APP_SHA)
 
 $(eval $(cmake-package))

@@ -202,15 +202,11 @@ int main(int argc, char **argv)
 	row("Host", val("host_model"));
 	row("Kernel", val("kernel"));
 
-	const char *fw = val("fw_version");
-	const char *sha = val("build_sha");
-	if (fw && *fw) {
-		if (sha && *sha)
-			snprintf(buf, sizeof buf, "%s (%.7s)", fw, sha);
-		else
-			snprintf(buf, sizeof buf, "%s", fw);
-		row("Firmware", buf);
-	}
+	// Release semver, then the two repo shas it was built from. Both shas are
+	// already short (--short / --abbrev=7, plus a -dirty suffix).
+	row("Version", val("version"));
+	row("OS-SHA", val("os_sha"));
+	row("App-SHA", val("app_sha"));
 
 	const char *slot = val("boot_slot");
 	if (slot && *slot) {

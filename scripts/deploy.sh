@@ -131,7 +131,7 @@ show_build() {
 	field mode "$(json_str "${j}" build_mode)"
 	field profile "$(json_str "${j}" profile)"
 	field epd "$(json_str "${j}" epd)"
-	field "built at" "$(json_str "${j}" built_at) ($(json_str "${j}" build_sha))"
+	field "built at" "$(json_str "${j}" built_at) ($(json_str "${j}" os_sha))"
 	[ -f "${d}/sdcard.img" ] && field sdcard.img "present" || field sdcard.img "MISSING (no image step possible)"
 	bundles=""
 	for b in "${d}"/releases/*.raucb; do

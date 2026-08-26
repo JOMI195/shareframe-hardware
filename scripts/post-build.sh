@@ -9,7 +9,7 @@ echo "=== Post-build: write build stamp ==="
 {
     echo "built_at=$(date --iso-8601=seconds)"
     echo "built_by=$(whoami)@$(hostname)"
-    echo "git_commit=${BUILD_SHA:-unknown}"
+    echo "git_commit=${OS_SHA:-unknown}"
     # config_label: from the config dir's config.env; empty for an argless build.
     echo "config_label=${SHAREFRAME_CONFIG_LABEL:-}"
 } > "$TARGET_DIR/etc/build-info"
@@ -20,10 +20,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Single version source for the app, RAUC manifest and server compare; the
 # explicit version wins, else the git sha.
-VERSION="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
+VERSION="${SHAREFRAME_VERSION:-${OS_SHA:-unknown}}"
 {
     echo "VERSION=${VERSION}"
-    echo "BUILD_SHA=${BUILD_SHA:-unknown}"
+    echo "OS_SHA=${OS_SHA:-unknown}"
+    echo "APP_SHA=${APP_SHA:-unknown}"
     echo "BUILD_DATE=$(date --iso-8601=seconds)"
 } > "$TARGET_DIR/etc/shareframe-release"
 echo "=== Post-build: /etc/shareframe-release VERSION=${VERSION} ==="
@@ -32,11 +33,15 @@ mkdir -p "$TARGET_DIR/etc/shareframe"
 printf 'version = "%s"\n' "${VERSION}" > "$TARGET_DIR/etc/shareframe/VERSION.toml"
 echo "=== Post-build: /etc/shareframe/VERSION.toml ==="
 
-if [ -n "$BUILD_SHA" ]; then
-    {
-        echo "BUILD_ID=$BUILD_SHA"
-    } >> "$TARGET_DIR/etc/os-release"
-    echo "=== Post-build: added BUILD_ID to /etc/os-release ==="
+# /etc/os-release is a symlink into /usr/lib; edit the real file. Replace-then-
+# append so a re-run can't stack duplicate BUILD_ID lines.
+OSREL="$TARGET_DIR/usr/lib/os-release"
+if [ -n "$OS_SHA" ] && [ -f "$OSREL" ]; then
+    sed -i -e "s/^VERSION=.*/VERSION=\"${OS_SHA}\"/" \
+           -e "s/^VERSION_ID=.*/VERSION_ID=\"${OS_SHA}\"/" \
+           -e "/^BUILD_ID=/d" "$OSREL"
+    echo "BUILD_ID=${OS_SHA}" >> "$OSREL"
+    echo "=== Post-build: os-release VERSION_ID/BUILD_ID=${OS_SHA} ==="
 fi
 
 # Fake-hwclock seed: virgin SDs start at build time, not the 1970 epoch.

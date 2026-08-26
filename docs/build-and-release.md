@@ -118,6 +118,25 @@ sets it directly (mutually exclusive). The version is baked into the rootfs
 both and it falls back to the git SHA (QEMU/dev only; a fielded board needs a
 real semver for the server compare).
 
+### Three identifiers
+
+A build carries three separate identities; only the first is a semver and only
+the first drives the OTA compare.
+
+| Key | Value | Written to | Dashboard row |
+|---|---|---|---|
+| `version` | `X.Y.Z` from the release cfg | `/etc/shareframe-release:VERSION`, `/etc/shareframe/VERSION.toml`, RAUC manifest | "Version" |
+| `os_sha` | `shareframe-hardware` short sha | `:OS_SHA`, `os-release` `VERSION_ID`/`BUILD_ID`, kernel `LOCALVERSION` | "System" |
+| `app_sha` | `shareframe-board` short sha | `:APP_SHA` **and compiled into the binaries** (`-DSHAREFRAME_APP_SHA`) | "Anwendung" |
+
+Those three keys are the whole contract — `/api/system/info`, the heartbeat and
+`shareframe-sysinfo` all use exactly these names. Only `version` is a semver and
+only `version` drives the OTA compare.
+
+The app sha is baked in rather than read from a file: `shareframe-board.mk` pins
+nothing (`SITE_METHOD = local`), so without it a bundle carries no record of which
+app commit is inside. A `-dirty` suffix means the checkout had uncommitted changes.
+
 A **prod build** (`SHAREFRAME_BUILD_MODE=prod`, the default) aborts up front unless
 all three hold: `SHAREFRAME_PROFILE=prod`, `SHAREFRAME_ROOT_PASSWD` set, and a PEM
 CA cert at `<config>/overlay/etc/rauc/ca.cert.pem`. For QEMU/dev iteration use a
@@ -214,8 +233,8 @@ scripts/make-release.sh --mode prod --release-dir releases/<release> \
 
 Output: `artifacts/builds/<label>/releases/` with `shareframe-<version>-<mode>.raucb`,
 a `.sha256` checksum file (`sha256sum -c`-compatible), and
-`release-<version>-<mode>.json` (version, config, criticality, sha256, size,
-notes). The same build can be signed again (dev + prod) — mode is in the filename,
+`release-<version>-<mode>.json` (version, config, os_sha, app_sha, criticality,
+sha256, size, notes). The same build can be signed again (dev + prod) — mode is in the filename,
 so both coexist. **Dev releases** are identical without the key env vars
 (`release dev …`); prod boards reject dev-signed bundles.
 

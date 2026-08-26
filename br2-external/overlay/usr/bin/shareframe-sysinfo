@@ -21,10 +21,12 @@ emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 # shellcheck disable=SC1091  # /etc/os-release is generated at build time
 [ -r /etc/os-release ] && ( . /etc/os-release; emit os_pretty_name "${PRETTY_NAME:-}" )
 
-# --- firmware release (written by post-build.sh) ---
+# --- release identity (written by post-build.sh): the semver plus the two repo
+# shas it was built from (os = shareframe-hardware, app = shareframe-board) ---
 if [ -r /etc/shareframe-release ]; then
-	emit fw_version "$(sed -n 's/^VERSION=//p' /etc/shareframe-release)"
-	emit build_sha "$(sed -n 's/^BUILD_SHA=//p' /etc/shareframe-release)"
+	emit version "$(sed -n 's/^VERSION=//p' /etc/shareframe-release)"
+	emit os_sha  "$(sed -n 's/^OS_SHA=//p' /etc/shareframe-release)"
+	emit app_sha "$(sed -n 's/^APP_SHA=//p' /etc/shareframe-release)"
 fi
 
 # --- booted A/B slot (cmdline) + trial flag (staged, uncommitted tryboot) ---

@@ -132,7 +132,7 @@ function buildroot() {
 
     # Build identity, resolved up front so the rebuild guard runs before the long
     # build. The staging step below reuses these.
-    local version="${SHAREFRAME_VERSION:-${BUILD_SHA:-unknown}}"
+    local version="${SHAREFRAME_VERSION:-${OS_SHA:-unknown}}"
     local label="${SHAREFRAME_CONFIG_LABEL:-default}-${version}"
     local dir="artifacts/builds/$label"
 
@@ -228,7 +228,8 @@ function buildroot() {
   "label": "${label}",
   "config": "${SHAREFRAME_CONFIG_LABEL:-default}",
   "version": "${version}",
-  "build_sha": "${BUILD_SHA:-unknown}",
+  "os_sha": "${OS_SHA:-unknown}",
+  "app_sha": "${APP_SHA:-unknown}",
   "build_mode": "${SHAREFRAME_BUILD_MODE:-prod}",
   "profile": "${SHAREFRAME_PROFILE:-prod}",
   "epd": "${SHAREFRAME_EPD:-OFF}",
@@ -376,7 +377,13 @@ function build() {
   local sha
   sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   printf 'CONFIG_LOCALVERSION="-%s"\n' "$sha" > br2-external/fragments/kernel-localversion.fragment
-  export BUILD_SHA="$sha"
+  export OS_SHA="$sha"
+
+  # App identity: the sibling checkout Buildroot rsyncs (SITE_METHOD=local pins
+  # nothing), so record which app commit actually went into the image.
+  local app_src="${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-../shareframe-board}"
+  export APP_SHA="$(git -C "$app_src" describe --always --abbrev=7 --dirty --exclude='*' 2>/dev/null || echo unknown)"
+  echo "=== App SHA: ${APP_SHA} (${app_src}) ==="
 
   toolchain
   buildroot "$config_dir"
