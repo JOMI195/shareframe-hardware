@@ -164,9 +164,12 @@ SHA256=$(sha256sum "${OUT_BUNDLE}" | cut -d' ' -f1)
 # sidecar in sha256sum format; the hash string goes into the server's checksum field
 ( cd "${OUT_DIR}" && sha256sum "$(basename "${OUT_BUNDLE}")" > "$(basename "${OUT_BUNDLE}").sha256" )
 SIZE=$(stat -c%s "${OUT_BUNDLE}")
+json_escape() {
+	awk '{ gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, ""); printf "%s%s", (NR > 1 ? "\\n" : ""), $0 }' "$1"
+}
 NOTES=""
-[ -n "${NOTES_FILE}" ] && [ -f "${NOTES_FILE}" ] && NOTES="$(sed 's/\\/\\\\/g; s/"/\\"/g' "${NOTES_FILE}" | tr '\n' ' ')"
-[ -z "${NOTES}" ] && [ -n "${REL_DIR}" ] && [ -f "${REL_DIR}/notes.md" ] && NOTES="$(sed 's/\\/\\\\/g; s/"/\\"/g' "${REL_DIR}/notes.md" | tr '\n' ' ')"
+[ -n "${NOTES_FILE}" ] && [ -f "${NOTES_FILE}" ] && NOTES="$(json_escape "${NOTES_FILE}")"
+[ -z "${NOTES}" ] && [ -n "${REL_DIR}" ] && [ -f "${REL_DIR}/notes.md" ] && NOTES="$(json_escape "${REL_DIR}/notes.md")"
 
 cat > "${OUT_DIR}/release-${VERSION}-${MODE}.json" <<EOF
 {
