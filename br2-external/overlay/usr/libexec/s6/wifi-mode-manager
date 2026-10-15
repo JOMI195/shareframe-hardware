@@ -18,7 +18,7 @@ ASSOC_TIMEOUT=45        # T1: wait for *association* before falling back to AP
 DHCP_GRACE=70           # after assoc, best-effort wait for an IP (no AP fallback)
 MONITOR_INTERVAL=30     # connected: ping / association check cadence
 AP_POLL=5               # ap: responsiveness to a dashboard retry request
-AP_RETRY_EVERY=120      # ap: seconds between automatic station retries
+AP_RETRY_EVERY=180      # ap: seconds between automatic station retries (>= display min_refresh_secs)
 DROP_LIMIT=3            # connected: failed assoc checks before re-evaluating
 WEDGE_BASE=4            # connected: no-internet checks before re-associating
 WEDGE_MAX=20            # connected: cap on the wedged-link backoff threshold
