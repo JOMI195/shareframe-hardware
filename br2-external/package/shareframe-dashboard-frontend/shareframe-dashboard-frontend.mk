@@ -11,6 +11,15 @@ SHAREFRAME_DASHBOARD_FRONTEND_LICENSE = ISC
 # host-nodejs provides $(HOST_DIR)/bin/{node,npm} used to build the SPA.
 SHAREFRAME_DASHBOARD_FRONTEND_DEPENDENCIES = host-nodejs
 
+# Buildroot's rsync never deletes, so files removed from the checkout would
+# linger in the build dir and still be compiled. Limited to frontend/ so the
+# stamps, npm cache and build output at the top level survive.
+define SHAREFRAME_DASHBOARD_FRONTEND_RSYNC_DELETE
+	rsync -au --delete --chmod=u=rwX,go=rX $(RSYNC_VCS_EXCLUSIONS) \
+		$(call qstrip,$(SRCDIR))/frontend/ $(@D)/frontend/
+endef
+SHAREFRAME_DASHBOARD_FRONTEND_POST_RSYNC_HOOKS += SHAREFRAME_DASHBOARD_FRONTEND_RSYNC_DELETE
+
 # Keep node PATH + npm cache inside the build dir (don't touch ~/.npm). Don't set
 # NODE_ENV=production: tsc/vite are devDependencies and must install.
 define SHAREFRAME_DASHBOARD_FRONTEND_BUILD_CMDS
