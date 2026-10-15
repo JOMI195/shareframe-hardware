@@ -29,10 +29,6 @@ VERSION="${SHAREFRAME_VERSION:-${OS_SHA:-unknown}}"
 } > "$TARGET_DIR/etc/shareframe-release"
 echo "=== Post-build: /etc/shareframe-release VERSION=${VERSION} ==="
 
-mkdir -p "$TARGET_DIR/etc/shareframe"
-printf 'version = "%s"\n' "${VERSION}" > "$TARGET_DIR/etc/shareframe/VERSION.toml"
-echo "=== Post-build: /etc/shareframe/VERSION.toml ==="
-
 # /etc/os-release is a symlink into /usr/lib; edit the real file. Replace-then-
 # append so a re-run can't stack duplicate BUILD_ID lines.
 OSREL="$TARGET_DIR/usr/lib/os-release"

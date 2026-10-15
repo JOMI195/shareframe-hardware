@@ -125,7 +125,7 @@ the first drives the OTA compare.
 
 | Key | Value | Written to | Dashboard row |
 |---|---|---|---|
-| `version` | `X.Y.Z` from the release cfg | `/etc/shareframe-release:VERSION`, `/etc/shareframe/VERSION.toml`, RAUC manifest | "Version" |
+| `version` | `X.Y.Z` from the release cfg | `/etc/shareframe-release:VERSION`, RAUC manifest | "Version" |
 | `os_sha` | `shareframe-hardware` short sha | `:OS_SHA`, `os-release` `VERSION_ID`/`BUILD_ID`, kernel `LOCALVERSION` | "System" |
 | `app_sha` | `shareframe-board` short sha | `:APP_SHA` **and compiled into the binaries** (`-DSHAREFRAME_APP_SHA`) | "Anwendung" |
 
