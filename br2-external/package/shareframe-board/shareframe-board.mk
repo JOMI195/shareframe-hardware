@@ -11,6 +11,17 @@ SHAREFRAME_BOARD_DEPENDENCIES = openssl sqlitecpp spdlog lgpio
 
 SHAREFRAME_BOARD_SUPPORTS_IN_SOURCE_BUILD = NO
 
+# Buildroot's rsync never deletes, so files removed from the checkout would
+# linger in the build dir and still be compiled. The excludes keep Buildroot's
+# own stamps, file lists and out-of-source build dir.
+define SHAREFRAME_BOARD_RSYNC_DELETE
+	rsync -au --delete --chmod=u=rwX,go=rX $(RSYNC_VCS_EXCLUSIONS) \
+		--exclude=/buildroot-build --exclude=/.stamp_* --exclude=/.files-list* \
+		--exclude=/.applied_patches_list \
+		$(call qstrip,$(SRCDIR))/ $(@D)/
+endef
+SHAREFRAME_BOARD_POST_RSYNC_HOOKS += SHAREFRAME_BOARD_RSYNC_DELETE
+
 # App git sha, baked into the binaries. Read from the SITE (or the dev override),
 # never $(@D): the local rsync drops .git. automation.sh exports APP_SHA; the
 # $(shell) is the fallback for a bare `make`.
