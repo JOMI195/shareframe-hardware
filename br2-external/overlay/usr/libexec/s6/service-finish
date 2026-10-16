@@ -1,6 +1,7 @@
 #!/bin/sh
 # s6 finish hook: $1=service $2=exit code (256 = killed) $3=signal.
 # Intended stops (wanted down) are silent; restarts and crashes go to the event log.
+# Exits 2 for a counted crash.
 set -u
 svc=$1; code=${2:-0}; sig=${3:-0}
 DATA_DIR=/data/shareframe
@@ -23,4 +24,4 @@ f=$DATA_DIR/crash_count
 n=$(cat "$f" 2>/dev/null || echo 0)
 case "$n" in ''|*[!0-9]*) n=0 ;; esac
 echo "$((n + 1))" > "$f.tmp" && mv "$f.tmp" "$f"
-exit 0
+exit 2

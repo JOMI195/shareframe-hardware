@@ -1,0 +1,24 @@
+#!/bin/sh
+# Runs from shareframe-display's finish after a counted crash. LIMIT crashes
+# within WINDOW seconds put the display into safe mode until the next reboot:
+# every restart refreshes the panel, so a crash loop wears it out.
+set -u
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+UPTIME="${UPTIME:-/proc/uptime}"
+LIMIT="${LIMIT:-5}"
+WINDOW="${WINDOW:-900}"
+LOG="$RUN_DIR/display-crashes"
+
+now=$(cut -d. -f1 "$UPTIME")
+mkdir -p "$RUN_DIR"
+{ cat "$LOG" 2>/dev/null; echo "$now"; } | awk -v now="$now" -v w="$WINDOW" 'now - $1 < w' > "$LOG.tmp"
+mv "$LOG.tmp" "$LOG"
+n=$(awk 'END { print NR }' "$LOG")
+
+if [ "$n" -ge "$LIMIT" ]; then
+	echo display-crash > "$RUN_DIR/safe-mode"
+	: > "$RUN_DIR/safe-mode-clear"
+	shareframe-event safe-mode "display crashed $n times in ${WINDOW}s; display disabled"
+	shareframe-led protected 2>/dev/null || true
+fi
+exit 0

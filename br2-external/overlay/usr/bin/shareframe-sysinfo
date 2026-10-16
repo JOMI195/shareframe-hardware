@@ -97,6 +97,19 @@ storage() {  # $1=mountpoint  $2=key prefix
 storage /data storage_data
 storage /     storage_root
 
+# --- SD card wear (f2fs lifetime writes on /data = p6) + card identity ---
+F2FS_WRITES=/sys/fs/f2fs/mmcblk0p6/lifetime_write_kbytes
+[ -r "$F2FS_WRITES" ] && awk '{ printf "data_written_kb=%.0f\n", $1 }' "$F2FS_WRITES"
+SD=/sys/block/mmcblk0/device
+if [ -r "$SD/name" ]; then
+	# Charset limited so the value stays a string and survives the backend's log regex.
+	emit sd_card "$(printf '%s mfr=%s oem=%s date=%s' "$(cat "$SD/name")" "$(cat "$SD/manfid" 2>/dev/null)" \
+		"$(cat "$SD/oemid" 2>/dev/null)" "$(cat "$SD/date" 2>/dev/null)" | tr -cd 'A-Za-z0-9 =/._-')"
+fi
+
+# --- display safe mode reason (boot-guard / display-crash-guard) ---
+[ -r /run/shareframe/safe-mode ] && emit safe_mode "$(head -1 /run/shareframe/safe-mode)"
+
 # --- CPU temperature (°C); thermal zone may be absent on this kernel ---
 TZ_TEMP=/sys/class/thermal/thermal_zone0/temp
 [ -r "$TZ_TEMP" ] && awk '{ printf "cpu_temp_celsius=%.1f\n", $1 / 1000 }' "$TZ_TEMP"

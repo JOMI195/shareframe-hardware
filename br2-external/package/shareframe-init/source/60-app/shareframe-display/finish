@@ -1,2 +1,5 @@
 #!/bin/sh
-exec /usr/libexec/s6/service-finish shareframe-display "$@"
+# 125 = s6 stops restarting it: safe mode keeps the display down until reboot.
+[ -f /run/shareframe/safe-mode ] && exit 125
+/usr/libexec/s6/service-finish shareframe-display "$@" && exit 0
+exec /usr/libexec/s6/display-crash-guard

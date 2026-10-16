@@ -1,0 +1,40 @@
+#!/bin/sh
+# Boot loop guard: LIMIT boots in a row that each end before STABLE seconds of
+# uptime put the display into safe mode for this boot, so a loop can't wear out
+# the panel. A trial boot is exempt: tryboot falls back on its own, never loops.
+set -u
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
+CMDLINE="${CMDLINE:-/proc/cmdline}"
+LIMIT="${LIMIT:-5}"
+STABLE="${STABLE:-600}"
+COUNT="$DATA_DIR/short_boots"
+CLEARED="$DATA_DIR/safe-mode-cleared"
+
+n=$(cat "$COUNT" 2>/dev/null || echo 0)
+case "$n" in ''|*[!0-9]*) n=0 ;; esac
+n=$((n + 1))
+echo "$n" > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
+
+slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null)
+trial=0
+[ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ] && trial=1
+
+if [ "$n" -ge "$LIMIT" ] && [ "$trial" = 0 ]; then
+	mkdir -p "$RUN_DIR"
+	echo boot-loop > "$RUN_DIR/safe-mode"
+	if [ ! -f "$CLEARED" ]; then
+		: > "$RUN_DIR/safe-mode-clear"
+		: > "$CLEARED"
+	fi
+	shareframe-event safe-mode "boot loop: $n boots under ${STABLE}s; display disabled"
+	shareframe-led protected 2>/dev/null || true
+fi
+
+(
+	sleep "$STABLE"
+	echo 0 > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
+	rm -f "$CLEARED"
+) </dev/null >/dev/null 2>&1 &
+exit 0

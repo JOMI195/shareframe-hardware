@@ -1,2 +1,8 @@
 #!/bin/sh
-exec env SHAREFRAME_PROFILE="$(cat /etc/shareframe-profile 2>/dev/null || echo prod)" /usr/bin/shareframe-display
+PROFILE="$(cat /etc/shareframe-profile 2>/dev/null || echo prod)"
+if [ -f /run/shareframe/safe-mode ]; then
+	[ -f /run/shareframe/safe-mode-clear ] || exit 0
+	rm -f /run/shareframe/safe-mode-clear
+	exec env SHAREFRAME_PROFILE="$PROFILE" /usr/bin/shareframe-display --clear
+fi
+exec env SHAREFRAME_PROFILE="$PROFILE" /usr/bin/shareframe-display

@@ -19,6 +19,7 @@ of the pattern — count from there. `normal` is a single short blink every
 | 3 short | `wifi-down` | associated, no internet |
 | 4 short | `ap-mode` | setup access point active |
 | 1 long | `updating` | update installing — do not power off |
+| 2 long | `protected` | display safe mode after a boot or display crash loop; panel left blank |
 | solid on | `error` | critical fault; latched until reboot |
 | off | `off` | shut down (or no power) |
 
@@ -28,6 +29,14 @@ The wifi manager owns the wifi/normal codes and writes only on change.
 `error` and `updating` are asserted on top and survive; `error` latches
 until reboot. `off` is written on shutdown and right before the post-update
 reboot.
+
+`protected` is set when `/run/shareframe/safe-mode` exists and owns the LED
+until reboot: every other state except `updating` and `off` is ignored.
+Safe mode starts after 5 boots in a row that each end within 10 minutes
+(`boot-guard`) or 5 display crashes within 15 minutes (`display-crash-guard`).
+The display stays down while wifi, heartbeat, updates and the dashboard keep
+running. To leave it, keep the frame powered for 10 minutes, then reboot or
+replug it.
 
 ## Configuration
 
