@@ -1,7 +1,12 @@
 #!/bin/sh
-# Persist current epoch hourly so cold boot has a sane starting clock.
-while true; do
+# Persist current epoch hourly and on stop so a boot starts from a sane clock.
+save() {
 	date +%s > /data/fake-hwclock.tmp 2>/dev/null && \
 		mv /data/fake-hwclock.tmp /data/fake-hwclock
-	sleep 3600
+}
+trap 'kill "$sleeper" 2>/dev/null; save; exit 0' TERM
+while true; do
+	save
+	sleep 3600 & sleeper=$!
+	wait "$sleeper"
 done
