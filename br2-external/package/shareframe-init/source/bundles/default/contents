@@ -36,6 +36,7 @@ rauc-mark-good
 shareframe-data-dirs
 shareframe-boot-count
 boot-event
+boot-guard
 seed-shareframe-secrets
 system-migrations
 shareframe-db-migrate

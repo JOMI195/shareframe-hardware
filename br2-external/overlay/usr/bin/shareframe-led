@@ -1,14 +1,17 @@
 #!/bin/sh
 # Blink codes are documented in docs/led-status-codes.md.
 set -eu
-LED=/sys/class/leds/ACT
+LED="${LED:-/sys/class/leds/ACT}"
+SAFE_MODE="${SAFE_MODE:-/run/shareframe/safe-mode}"
 die() { printf 'shareframe-led: %s\n' "$*" >&2; exit 1; }
 [ $# -eq 1 ] || die "usage: shareframe-led <state>"
+# Safe mode owns the LED; other writers become no-ops.
+case "$1" in protected|updating|off) ;; *) [ -f "$SAFE_MODE" ] && exit 0 ;; esac
 [ -d "$LED" ] || die "ACT LED not found"
 
 # Defaults; overridable via led.conf (shell assignments only, /data wins).
 SHORT=200; LONG=800; GAP=300; CYCLE=2000; NORMAL_CYCLE=9800
-NORMAL="0 1"; WIFI_CONNECTING="0 2"; WIFI_DOWN="0 3"; AP_MODE="0 4"; UPDATING="1 0"
+NORMAL="0 1"; WIFI_CONNECTING="0 2"; WIFI_DOWN="0 3"; AP_MODE="0 4"; UPDATING="1 0"; PROTECTED="2 0"
 for conf in /etc/shareframe/led.conf /data/shareframe/led.conf; do
     [ -r "$conf" ] && . "$conf" || true
 done
@@ -51,6 +54,8 @@ case "$1" in
         code $AP_MODE "$CYCLE" 800 800 ;;
     updating)
         code $UPDATING "$CYCLE" 50 50 ;;
+    protected)
+        code $PROTECTED "$CYCLE" 1000 1000 ;;
     error)
         echo none    > "$LED/trigger"
         echo "$MAXB" > "$LED/brightness" ;;
