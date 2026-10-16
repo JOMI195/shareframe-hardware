@@ -1,0 +1,36 @@
+#!/bin/sh
+# Board checks before a remote reboot-class command (reboot, update, factory reset).
+#   check  exit 1 with the reason on stdout when the board must not reboot now
+#   mark   record a remote reboot for the rate limit
+set -u
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
+MARK="$DATA_DIR/remote-reboot-at"
+MIN_GAP="${MIN_GAP:-1800}"
+
+case "${1:-}" in
+check)
+	slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
+	if [ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ]; then
+		echo "booted slot $slot is not confirmed yet; a reboot would roll the update back"
+		exit 1
+	fi
+	last=$(cat "$MARK" 2>/dev/null || echo 0)
+	case "$last" in ''|*[!0-9]*) last=0 ;; esac
+	now=$(date +%s)
+	# A clock that went backwards must not block forever.
+	if [ "$now" -ge "$last" ] && [ "$((now - last))" -lt "$MIN_GAP" ]; then
+		echo "last remote reboot was less than $((MIN_GAP / 60)) minutes ago"
+		exit 1
+	fi
+	exit 0
+	;;
+mark)
+	mkdir -p "$DATA_DIR"
+	date +%s > "$MARK.tmp" && mv "$MARK.tmp" "$MARK"
+	;;
+*)
+	echo "usage: shareframe-remote-gate check|mark" >&2
+	exit 2
+	;;
+esac
