@@ -49,6 +49,37 @@ fi
 # --- overall health (published by shareframe-health: ok|warn|critical) ---
 [ -r /run/shareframe/health ] && emit health_state "$(cat /run/shareframe/health 2>/dev/null)"
 
+# --- per-check health + fault counters (shareframe-health, service-finish, boot-event) ---
+HJSON=/run/shareframe/health.json
+for c in oom temp disk; do
+	s=$(sed -n "s/.*\"$c\":\"\([a-z]*\)\".*/\1/p" "$HJSON" 2>/dev/null)
+	[ -n "$s" ] && emit "health_$c" "$s"
+done
+count() { v=$(cat "$1" 2>/dev/null); case "$v" in ''|*[!0-9]*) v=0 ;; esac; echo "$v"; }
+emit crash_count    "$(count /data/shareframe/crash_count)"
+emit unclean_resets "$(count /data/shareframe/unclean_resets)"
+emit oom_kills      "$(count /run/shareframe/oom-kills)"
+emit uv_events      "$(count /run/shareframe/uv_events)"
+
+# --- per-boot watermarks (shareframe-health) ---
+[ -r /run/shareframe/temp_peak ] && awk '{ printf "temp_peak_celsius=%.1f\n", $1 / 1000 }' /run/shareframe/temp_peak
+[ -r /run/shareframe/ram_avail_min ] && awk '{ printf "ram_available_min_bytes=%.0f\n", $1 * 1024 }' /run/shareframe/ram_avail_min
+
+# --- per app service memory: VmData = heap + thread stacks (musl has no mallinfo) ---
+for svc in display dashboard websocket heartbeat update; do
+	pid=$(s6-svstat -o pid "/run/service/shareframe-$svc" 2>/dev/null)
+	case "$pid" in ''|-*|*[!0-9]*) continue ;; esac
+	[ -r "/proc/$pid/status" ] || continue
+	awk -v p="proc_${svc}_" '
+		/^VmRSS:/   { printf "%srss_bytes=%.0f\n",      p, $2 * 1024 }
+		/^VmHWM:/   { printf "%srss_peak_bytes=%.0f\n", p, $2 * 1024 }
+		/^VmData:/  { printf "%sheap_bytes=%.0f\n",     p, $2 * 1024 }
+		/^VmStk:/   { printf "%sstack_bytes=%.0f\n",    p, $2 * 1024 }
+		/^Threads:/ { printf "%sthreads=%d\n",          p, $2 }
+	' "/proc/$pid/status"
+	emit "proc_${svc}_fds" "$(ls "/proc/$pid/fd" 2>/dev/null | wc -l)"
+done
+
 # --- memory (bytes) ---
 # %.0f everywhere bytes are printed: busybox awk %d clamps to 32-bit on ARM.
 [ -r /proc/meminfo ] && awk '
