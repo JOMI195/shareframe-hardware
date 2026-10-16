@@ -35,6 +35,7 @@ rauc-reconcile
 rauc-mark-good
 shareframe-data-dirs
 shareframe-boot-count
+boot-event
 seed-shareframe-secrets
 system-migrations
 shareframe-db-migrate

@@ -10,7 +10,6 @@ PROC="${PROC:-/proc}"
 THERMAL="${THERMAL:-/sys/class/thermal/thermal_zone0/temp}"
 STATE_DIR="${STATE_DIR:-/run/shareframe}"
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
-LOG_FILE="${LOG_FILE:-$DATA_DIR/health.log}"
 DMESG="${DMESG:-dmesg}"
 
 # Tunables
@@ -22,30 +21,21 @@ DISK_CRIT_PCT="${DISK_CRIT_PCT:-5}"  #          critical below
 # Only writable mounts can fill up; / is read-only (always ~100%).
 DISK_MOUNTS="${DISK_MOUNTS:-/data}"
 EVENT_HOLD="${EVENT_HOLD:-300}"      # keep a point-in-time event (oom/under-volt) latched this long
-LOG_MAX_LINES="${LOG_MAX_LINES:-2000}"
 
 # Reporting
 now() { date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null; }
 
-log() {  # persist + console + best-effort syslog
-	printf '%s %s\n' "$(now)" "$*" >> "$LOG_FILE" 2>/dev/null || true
-	printf 'shareframe-health: %s\n' "$*" > /dev/console 2>/dev/null || true
-	logger -t shareframe-health "$*" 2>/dev/null || true
-}
-
-rotate_log() {  # keep the persisted log bounded
-	[ -f "$LOG_FILE" ] || return 0
-	lines=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
-	[ "$lines" -gt "$LOG_MAX_LINES" ] || return 0
-	tail -n "$((LOG_MAX_LINES / 2))" "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null &&
-		mv "$LOG_FILE.tmp" "$LOG_FILE" 2>/dev/null || true
+log() {  # $1=source $2..=message -> event log + console
+	src=$1; shift
+	DATA_DIR="$DATA_DIR" shareframe-event "$src" "$*"
+	printf 'shareframe-health: [%s] %s\n' "$src" "$*" > /dev/console 2>/dev/null || true
 }
 
 # Emit a log line only when a check changes state (dedup), then remember it.
 note_change() {  # $1=check  $2=new-state  $3=detail
 	prev_file="$STATE_DIR/state.$1"
 	prev=ok; [ -f "$prev_file" ] && prev=$(cat "$prev_file" 2>/dev/null)
-	[ "$2" = "$prev" ] || log "[$1] $prev -> $2${3:+ ($3)}"
+	[ "$2" = "$prev" ] || log "$1" "$prev -> $2${3:+ ($3)}"
 	printf '%s\n' "$2" > "$prev_file"
 }
 
@@ -112,6 +102,7 @@ check_temp() {
 		elif [ "$c" -gt "$TEMP_WARN_C" ]; then state=warn; detail="${c}C"; fi
 	fi
 	uv=$(dmesg_new uv 'under-voltage|undervoltage|throttl')
+	[ "$uv" -gt 0 ] && printf '%s\n' "$(( $(cat "$STATE_DIR/uv_events" 2>/dev/null || echo 0) + uv ))" > "$STATE_DIR/uv_events"
 	if [ "$(hold_event uv "$uv")" = active ]; then state=$(worse "$state" critical); detail="${detail:+$detail }under-voltage/throttle"; fi
 	note_change temp "$state" "$detail"; echo "$state"
 }
@@ -132,17 +123,30 @@ check_disk() {
 	note_change disk "$state" "$detail"; echo "$state"
 }
 
+# Per-boot extremes for the heartbeat (temp peak in milli-C, lowest MemAvailable in kB).
+watermarks() {
+	[ -r "$THERMAL" ] && {
+		t=$(cat "$THERMAL"); p=$(cat "$STATE_DIR/temp_peak" 2>/dev/null || echo 0)
+		[ "$t" -gt "$p" ] && printf '%s\n' "$t" > "$STATE_DIR/temp_peak"
+	}
+	a=$(awk '/^MemAvailable:/ { print $2 }' "$PROC/meminfo" 2>/dev/null)
+	[ -n "$a" ] || return 0
+	m=$(cat "$STATE_DIR/ram_avail_min" 2>/dev/null || echo "$a")
+	[ "$a" -le "$m" ] && printf '%s\n' "$a" > "$STATE_DIR/ram_avail_min"
+	return 0
+}
+
 # Main loop
 mkdir -p "$STATE_DIR" "$DATA_DIR"
-log "[health] daemon up (interval ${INTERVAL}s; oom/temp/disk)"
+log health "daemon up (interval ${INTERVAL}s; oom/temp/disk)"
 while :; do
 	overall=ok
 	for s in "$(check_oom)" "$(check_temp)" "$(check_disk)"; do
 		overall=$(worse "$overall" "$s")
 	done
 	publish "$overall"
+	watermarks
 	# Only remediation: claim the LED on a critical fault (never reset it).
 	[ "$overall" = critical ] && shareframe-led error 2>/dev/null || true
-	rotate_log
 	sleep "$INTERVAL"
 done

@@ -96,12 +96,14 @@ wait_for_sta() {
 
 enter_connected() {
 	log "mode -> connected (ssid=$(cur_ssid))"
+	shareframe-event wifi "connected"
 	set_led normal
 	write_mode connected
 }
 
 enter_ap() {
 	log "mode -> ap (no known wifi joined)"
+	shareframe-event wifi "ap fallback (no known wifi joined)"
 	# Stop + pin down the station services so they don't fight the switch.
 	: > "$SWITCH_FLAG"
 	s6-svc -d "$SVC/dhcpcd-wlan"    2>/dev/null || true
