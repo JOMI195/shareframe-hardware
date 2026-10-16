@@ -149,9 +149,8 @@ if [ -r "$WMODE_FILE" ]; then
 fi
 
 # --- WLAN signal (dBm) + link state ---
-[ -r /proc/net/wireless ] && awk -v ifc="$IFACE" '
-	$1 ~ ("^" ifc ":") { lvl = $4; sub(/\./, "", lvl); printf "wlan_signal_dbm=%d\n", lvl }
-' /proc/net/wireless
+# nl80211 via iw: the kernel has no CFG80211_WEXT, so /proc/net/wireless stays empty.
+iw dev "$IFACE" link 2>/dev/null | awk '/signal:/ { printf "wlan_signal_dbm=%d\n", $2; exit }'
 
 OPER="/sys/class/net/${IFACE}/operstate"
 if [ -r "$OPER" ]; then
