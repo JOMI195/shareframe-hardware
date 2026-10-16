@@ -1,9 +1,11 @@
 #!/bin/sh
 # Clean f2fs shutdown: flush + final checkpoint so the next boot needs no recovery.
+: > /data/shareframe/clean-shutdown 2>/dev/null
 sync
 for i in 1 2 3 4 5; do
 	umount /data 2>/dev/null && exit 0
 	sleep 1
 done
 mount -o remount,ro /data && exit 0
+rm -f /data/shareframe/clean-shutdown
 echo "umount-data: /data busy, no clean checkpoint (expect recovery next boot)" > /dev/console

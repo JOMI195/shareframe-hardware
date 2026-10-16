@@ -1,0 +1,39 @@
+#!/bin/sh
+# Persistent device event log on /data (survives reboot, unlike /var/log).
+#   shareframe-event <source> <message...>   append "<seq> <time> [<source>] <message>"
+#   shareframe-event --since <seq>           print lines with a higher seq
+set -u
+
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+LOG_FILE="${LOG_FILE:-$DATA_DIR/health.log}"
+LOG_MAX_LINES="${LOG_MAX_LINES:-2000}"
+
+last_seq() {
+	awk '$1 ~ /^[0-9]+$/ { s = $1 } END { print s + 0 }' "$LOG_FILE" 2>/dev/null || echo 0
+}
+
+if [ "${1:-}" = "--since" ]; then
+	since=${2:-0}
+	case "$since" in ''|*[!0-9]*) since=0 ;; esac
+	# A wiped log restarts seq at 1; a stale higher cursor must not hide it.
+	[ "$since" -gt "$(last_seq)" ] && since=0
+	awk -v s="$since" '$1 ~ /^[0-9]+$/ && $1 + 0 > s + 0' "$LOG_FILE" 2>/dev/null
+	exit 0
+fi
+
+[ $# -ge 2 ] || { echo "usage: shareframe-event <source> <message...> | --since <seq>" >&2; exit 2; }
+src=$1; shift
+
+mkdir -p "$DATA_DIR" 2>/dev/null || true
+{
+	flock 9
+	seq=$(( $(last_seq) + 1 ))
+	printf '%s %s [%s] %s\n' "$seq" "$(date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)" "$src" "$*" >> "$LOG_FILE"
+	lines=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+	if [ "$lines" -gt "$LOG_MAX_LINES" ]; then
+		tail -n "$((LOG_MAX_LINES / 2))" "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+	fi
+} 9>> "$LOG_FILE.lock" 2>/dev/null || true
+
+logger -t "shareframe-$src" "$*" 2>/dev/null || true
+exit 0

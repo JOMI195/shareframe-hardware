@@ -1,0 +1,21 @@
+#!/bin/sh
+# Boot record. umount-data leaves clean-shutdown behind on an orderly stop; its
+# absence means power loss, watchdog or panic. The first boot has no marker yet.
+set -u
+D=/data/shareframe
+boots=$(cat "$D/boot_count" 2>/dev/null || echo 0)
+
+if [ -f "$D/clean-shutdown" ] || [ "$boots" -le 1 ]; then
+	unclean=0
+else
+	unclean=1
+	n=$(cat "$D/unclean_resets" 2>/dev/null || echo 0)
+	case "$n" in ''|*[!0-9]*) n=0 ;; esac
+	echo "$((n + 1))" > "$D/unclean_resets.tmp" && mv "$D/unclean_resets.tmp" "$D/unclean_resets"
+fi
+rm -f "$D/clean-shutdown"
+
+version=$(sed -n 's/^VERSION=//p' /etc/shareframe-release 2>/dev/null)
+slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
+shareframe-event boot "version=${version:-?} slot=${slot:-?} boot_count=$boots unclean=$unclean"
+exit 0

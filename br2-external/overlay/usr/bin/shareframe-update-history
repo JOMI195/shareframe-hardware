@@ -26,4 +26,5 @@ lines=$(wc -l < "$HIST" 2>/dev/null || echo 0)
 if [ "$lines" -gt "$MAX" ]; then
 	tail -n "$MAX" "$HIST" > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
 fi
+shareframe-event update "$RESULT ${from:-?} -> ${to:-?}${ERROR:+ ($ERROR)}"
 rm -f "$META"

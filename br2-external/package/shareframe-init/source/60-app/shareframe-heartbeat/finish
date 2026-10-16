@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/libexec/s6/service-finish shareframe-heartbeat "$@"

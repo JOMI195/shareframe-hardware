@@ -4,17 +4,11 @@
 set -u
 
 STATE_DIR=/run/shareframe
-DATA_DIR=/data/shareframe
-LOG_FILE="$DATA_DIR/health.log"
 
-mkdir -p "$STATE_DIR" "$DATA_DIR" 2>/dev/null || true
+mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 name=${EARLYOOM_NAME:-?}; pid=${EARLYOOM_PID:-?}; uid=${EARLYOOM_UID:-?}
-ts=$(date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)
-
-printf '%s [oom] earlyoom killed pid=%s name=%s uid=%s\n' "$ts" "$pid" "$name" "$uid" \
-	>> "$LOG_FILE" 2>/dev/null || true
-logger -t earlyoom "killed pid=$pid name=$name uid=$uid" 2>/dev/null || true
+shareframe-event oom "earlyoom killed pid=$pid name=$name uid=$uid"
 
 # Bump the OOM counter for an immediate signal between health polls.
 c=0; [ -f "$STATE_DIR/oom-kills" ] && c=$(cat "$STATE_DIR/oom-kills" 2>/dev/null)
