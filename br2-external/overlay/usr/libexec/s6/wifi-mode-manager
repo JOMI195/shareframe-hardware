@@ -13,6 +13,7 @@ JSON_FILE="$STATE_DIR/wifi-mode.json"
 RETRY_FLAG="$STATE_DIR/wifi-retry-requested"
 SWITCH_FLAG="$STATE_DIR/wifi-switching"
 AP_CONF=/data/wifi/ap.conf
+WPA_CONF=/data/wifi/wpa_supplicant.conf
 
 ASSOC_TIMEOUT=45        # T1: wait for *association* before falling back to AP
 DHCP_GRACE=70           # after assoc, best-effort wait for an IP (no AP fallback)
@@ -47,6 +48,12 @@ cur_ssid() {
 	wpa_cli -i "$IFACE" status 2>/dev/null | sed -n 's/^ssid=//p' | head -1 | tr -d '\\"'
 }
 
+# Saved SSIDs as JSON strings; quotes, backslashes and control chars are stripped.
+known_ssids() {
+	sed -n 's/^[[:space:]]*ssid=//p' "$WPA_CONF" 2>/dev/null \
+		| awk '{ gsub(/["\\[:cntrl:]]/, ""); printf "%s\"%s\"", (NR > 1 ? "," : ""), $0 }'
+}
+
 write_mode() {
 	mode="$1"
 	mkdir -p "$STATE_DIR"
@@ -56,9 +63,10 @@ write_mode() {
 		connected) ssid="$(cur_ssid)"; have_internet && internet=true ;;
 		connecting) ssid="$(cur_ssid)" ;;
 	esac
+	known="$(known_ssids)"
 	ap_creds
 	cat > "$JSON_FILE" <<EOF
-{"mode":"$mode","ssid":"$ssid","internet":$internet,"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS"}
+{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS"}
 EOF
 }
 
