@@ -1,6 +1,8 @@
 #!/bin/sh
 # Pi Zero W has no RTC. Restore last-known time so TLS works before NTP sync.
 # Sources, in order: /data/fake-hwclock (per-boot save), /etc/fake-hwclock-default (build stamp).
+# A power cut without internet still leaves the clock behind by the outage until NTP;
+# an offline mode needs a real time source (RTC).
 set -e
 
 stamp=
