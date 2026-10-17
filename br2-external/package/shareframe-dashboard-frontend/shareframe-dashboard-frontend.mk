@@ -33,6 +33,7 @@ endef
 
 # vite.config.ts emits the production bundle to ../build (i.e. $(@D)/build).
 define SHAREFRAME_DASHBOARD_FRONTEND_INSTALL_TARGET_CMDS
+	rm -rf $(TARGET_DIR)/usr/share/shareframe/dashboard-frontend
 	mkdir -p $(TARGET_DIR)/usr/share/shareframe/dashboard-frontend
 	cp -a $(@D)/build/. $(TARGET_DIR)/usr/share/shareframe/dashboard-frontend/
 endef
