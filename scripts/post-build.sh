@@ -58,9 +58,20 @@ echo "=== Post-build: /etc/shareframe-profile=${PROFILE} ==="
 OVERLAY_SRC="${SCRIPT_DIR}/../br2-external/board/raspberrypi0w/overlays/spi0-spidev.dts"
 DTC="${HOST_DIR}/bin/dtc"
 if [ -x "${DTC}" ] && [ -f "${OVERLAY_SRC}" ]; then
-    mkdir -p "${TARGET_DIR}/boot"
-    "${DTC}" -@ -I dts -O dtb -o "${TARGET_DIR}/boot/spi0-spidev.dtbo" "${OVERLAY_SRC}"
-    # Also stage into BINARIES_DIR for the initial flash (post-image.sh).
-    [ -n "${BINARIES_DIR:-}" ] && cp "${TARGET_DIR}/boot/spi0-spidev.dtbo" "${BINARIES_DIR}/spi0-spidev.dtbo"
-    echo "=== Post-build: spi0-spidev.dtbo compiled into /boot ==="
+    "${DTC}" -@ -I dts -O dtb -o "${BINARIES_DIR}/spi0-spidev.dtbo" "${OVERLAY_SRC}"
+    echo "=== Post-build: spi0-spidev.dtbo compiled into ${BINARIES_DIR} ==="
 fi
+
+# Buildroot never cleans output/target; the kernel ships in boot.tar, not /boot.
+rm -rf "${TARGET_DIR}/boot"
+
+# Per-commit LOCALVERSION leaves one modules dir per old build; keep the live one.
+KREL="$(cat "${BUILD_DIR}"/linux-[0-9]*/include/config/kernel.release 2>/dev/null || true)"
+if [ -z "${KREL}" ] || [ ! -d "${TARGET_DIR}/lib/modules/${KREL}" ]; then
+    echo "post-build: kernel modules for '${KREL}' not found in target" >&2
+    exit 1
+fi
+for d in "${TARGET_DIR}"/lib/modules/*; do
+    [ "$(basename "$d")" = "${KREL}" ] || rm -rf "$d"
+done
+echo "=== Post-build: kept /lib/modules/${KREL} only ==="
