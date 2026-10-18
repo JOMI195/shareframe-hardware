@@ -54,10 +54,11 @@ known_ssids() {
 		| awk '{ gsub(/["\\[:cntrl:]]/, ""); printf "%s\"%s\"", (NR > 1 ? "," : ""), $0 }'
 }
 
+# Readers poll these files: write aside and rename so they never see a partial file.
 write_mode() {
 	mode="$1"
 	mkdir -p "$STATE_DIR"
-	printf '%s\n' "$mode" > "$MODE_FILE"
+	printf '%s\n' "$mode" > "$MODE_FILE.tmp" && mv -f "$MODE_FILE.tmp" "$MODE_FILE"
 	ssid=""; internet=false
 	case "$mode" in
 		connected) ssid="$(cur_ssid)"; have_internet && internet=true ;;
@@ -65,9 +66,10 @@ write_mode() {
 	esac
 	known="$(known_ssids)"
 	ap_creds
-	cat > "$JSON_FILE" <<EOF
+	cat > "$JSON_FILE.tmp" <<EOF
 {"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS"}
 EOF
+	mv -f "$JSON_FILE.tmp" "$JSON_FILE"
 }
 
 enter_connecting() {
