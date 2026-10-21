@@ -62,6 +62,14 @@ if [ -x "${DTC}" ] && [ -f "${OVERLAY_SRC}" ]; then
     echo "=== Post-build: spi0-spidev.dtbo compiled into ${BINARIES_DIR} ==="
 fi
 
+# ramoops goes into the per-slot base DTB, not config.txt: updates never rewrite config.txt.
+RAMOOPS_SRC="${SCRIPT_DIR}/../br2-external/board/raspberrypi0w/ramoops.dts"
+BASE_DTB="${BINARIES_DIR}/bcm2835-rpi-zero-w.dtb"
+"${DTC}" -@ -I dts -O dtb -o "${BUILD_DIR}/ramoops.dtbo" "${RAMOOPS_SRC}"
+"${HOST_DIR}/bin/fdtoverlay" -i "${BASE_DTB}" -o "${BASE_DTB}.tmp" "${BUILD_DIR}/ramoops.dtbo"
+mv "${BASE_DTB}.tmp" "${BASE_DTB}"
+echo "=== Post-build: ramoops merged into ${BASE_DTB} ==="
+
 # Buildroot never cleans output/target; the kernel ships in boot.tar, not /boot.
 rm -rf "${TARGET_DIR}/boot"
 

@@ -18,6 +18,11 @@ collect() {
 	section events;         tail -n "$LINES" /data/shareframe/health.log
 	section update-history; tail -n 20 /data/shareframe/update-history.jsonl
 	section rauc;           rauc status
+	section last-reset
+	for f in /data/shareframe/last-reset/*; do
+		[ -f "$f" ] || continue
+		printf -- '--- %s\n' "${f##*/}"; tail -n "$LINES" "$f"
+	done
 	section dmesg;          dmesg | tail -n "$LINES"
 	section syslog;         tail -n "$LINES" /var/log/messages
 	for f in /var/log/shareframe/*.log; do
