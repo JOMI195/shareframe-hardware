@@ -66,10 +66,18 @@ QEMU, but it lacks the prod CA so prod boards reject those bundles.
 
 ```sh
 cp -r configs/per-device/example configs/per-device/<board>
-$EDITOR configs/per-device/<board>/factory/*      # identity, Wi-Fi, AP
+scripts/gen-device-key.sh --device configs/per-device/<board>   # identity
+$EDITOR configs/per-device/<board>/factory/*      # Wi-Fi, AP, dashboard pw
 scripts/provision-device.sh --device configs/per-device/<board> [--root-passwd]
 dd if=artifacts/flash/<board>-<version>.img of=/dev/sdX bs=4M conv=fsync
 ```
+
+`gen-device-key.sh` creates the board's ed25519 keypair on this host and writes
+the private seed into `factory/.env.secrets.toml`. It prints the frame id and the
+public key, paste the public key into the server's Frame admin (add or change
+frame), the frame id is derived from it. The private key never leaves this host
+and the card. It refuses to replace an existing key unless `--force` is given,
+`--selftest` checks the derivation against a known vector.
 
 `--from <label>` picks a stored build (default `latest`); `--root-passwd` prompts
 and writes the crypt hash to `factory/rootpw`. The factory files are seeded to
