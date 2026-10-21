@@ -62,7 +62,7 @@ Shareframe-Board is the custom embedded Linux operating system that runs on the 
 **System services**:
 
 - **nginx :80**: Serves the local board management dashboard and proxies its requests.
-- **dropbear**: Lightweight SSH server for remote access.
+- **dropbear**: Lightweight SSH server which works only over the USB cable, never over WiFi.
 - **avahi**: mDNS hostname resolution on the local network (`shareframe-board-<XXXX>.local`, unique per device).
 - **ntpd, watchdog, earlyoom, crond, getty, …**: Supporting system daemons — time sync, hardware watchdog, out-of-memory protection, scheduled jobs, and console login.
 
