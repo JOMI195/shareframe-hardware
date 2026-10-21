@@ -1,5 +1,5 @@
 #!/bin/sh
-# Board checks before a remote reboot-class command (reboot, update, factory reset).
+# Board checks before a remote reboot-class command (reboot, update, factory reset, shutdown).
 #   check  exit 1 with the reason on stdout when the board must not reboot now
 #   mark   record a remote reboot for the rate limit
 set -u
