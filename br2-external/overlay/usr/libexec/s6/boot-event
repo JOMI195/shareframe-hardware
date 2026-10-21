@@ -9,13 +9,29 @@ if [ -f "$D/clean-shutdown" ] || [ "$boots" -le 1 ]; then
 	unclean=0
 else
 	unclean=1
+	mkdir -p /run/shareframe && : > /run/shareframe/unclean-boot
 	n=$(cat "$D/unclean_resets" 2>/dev/null || echo 0)
 	case "$n" in ''|*[!0-9]*) n=0 ;; esac
 	echo "$((n + 1))" > "$D/unclean_resets.tmp" && mv "$D/unclean_resets.tmp" "$D/unclean_resets"
 fi
 rm -f "$D/clean-shutdown"
 
+# pstore keeps the last boot's console, panic and pmsg across a warm reset only.
+P=/sys/fs/pstore
+pstore=
+grep -q " $P pstore " /proc/mounts || mount -t pstore pstore "$P" 2>/dev/null
+if [ "$unclean" = 1 ]; then
+	rm -rf "$D/last-reset" && mkdir -p "$D/last-reset"
+	n=0
+	for f in "$P"/*; do
+		[ -f "$f" ] || continue
+		cp "$f" "$D/last-reset/" && n=$((n + 1))
+	done
+	pstore=" pstore=$n"
+fi
+rm -f "$P"/* 2>/dev/null
+
 version=$(sed -n 's/^VERSION=//p' /etc/shareframe-release 2>/dev/null)
 slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
-shareframe-event boot "version=${version:-?} slot=${slot:-?} boot_count=$boots unclean=$unclean"
+shareframe-event boot "version=${version:-?} slot=${slot:-?} boot_count=$boots unclean=$unclean$pstore"
 exit 0

@@ -42,6 +42,8 @@ fi
 
 [ -f "${FACTORY}/.env.secrets.toml" ] || {
 	echo "provision-device: ${FACTORY}/.env.secrets.toml missing — a device needs an identity" >&2; exit 1; }
+grep -q '^ed25519_private_key[[:space:]]*=[[:space:]]*"[^"]' "${FACTORY}/.env.secrets.toml" || {
+	echo "provision-device: no ed25519_private_key — run scripts/gen-device-key.sh --device ${DEVICE}" >&2; exit 1; }
 
 BUILD="${FROM}"
 [ -d "${BUILD}" ] || BUILD="${ROOT}/artifacts/builds/${FROM}"

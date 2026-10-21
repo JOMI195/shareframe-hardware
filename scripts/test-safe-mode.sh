@@ -26,21 +26,34 @@ check() { # <desc> <expected> <actual>
 }
 exists() { [ -f "$1" ] && echo yes || echo no; }
 
-boot() { # one boot: /run is fresh, /data persists
+boot() { # one unclean boot: /run is fresh, /data persists
+	rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR"
+	: > "$RUN_DIR/unclean-boot"
+	STABLE=$NAP "$S6/boot-guard"
+}
+
+clean_boot() {
 	rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR"
 	STABLE=$NAP "$S6/boot-guard"
 }
 
 for _ in 1 2 3 4; do boot; done
-check "4 short boots: no safe mode" no "$(exists "$RUN_DIR/safe-mode")"
+check "4 unclean boots: no safe mode" no "$(exists "$RUN_DIR/safe-mode")"
 boot
-check "5th short boot: safe mode" boot-loop "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)"
-check "5th short boot: panel clear requested" yes "$(exists "$RUN_DIR/safe-mode-clear")"
-check "5th short boot: event logged" yes "$(grep -q '^shareframe-event safe-mode boot loop' "$T/calls" && echo yes || echo no)"
-check "5th short boot: LED protected" yes "$(grep -q '^shareframe-led protected' "$T/calls" && echo yes || echo no)"
+check "5th unclean boot: safe mode" boot-loop "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)"
+check "5th unclean boot: panel clear requested" yes "$(exists "$RUN_DIR/safe-mode-clear")"
+check "5th unclean boot: event logged" yes "$(grep -q '^shareframe-event safe-mode boot loop' "$T/calls" && echo yes || echo no)"
+check "5th unclean boot: LED protected" yes "$(grep -q '^shareframe-led protected' "$T/calls" && echo yes || echo no)"
 boot
-check "6th short boot: still safe mode" boot-loop "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)"
-check "6th short boot: no second clear" no "$(exists "$RUN_DIR/safe-mode-clear")"
+check "6th unclean boot: still safe mode" boot-loop "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)"
+check "6th unclean boot: no second clear" no "$(exists "$RUN_DIR/safe-mode-clear")"
+
+clean_boot
+check "clean boot: no safe mode" no "$(exists "$RUN_DIR/safe-mode")"
+check "clean boot resets the counter" 0 "$(cat "$DATA_DIR/short_boots")"
+check "clean boot re-arms the panel clear" no "$(exists "$DATA_DIR/safe-mode-cleared")"
+for _ in 1 2 3 4; do boot; done
+check "4 unclean boots after a clean one: no safe mode" no "$(exists "$RUN_DIR/safe-mode")"
 
 echo A > "$PENDING_FILE"
 boot
@@ -48,6 +61,7 @@ check "trial boot is exempt" no "$(exists "$RUN_DIR/safe-mode")"
 rm -f "$PENDING_FILE"
 
 rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR"
+: > "$RUN_DIR/unclean-boot"
 STABLE=1 "$S6/boot-guard"
 for _ in $(seq 30); do [ "$(cat "$DATA_DIR/short_boots")" = 0 ] && break; sleep 0.1; done
 check "stable uptime resets the counter" 0 "$(cat "$DATA_DIR/short_boots")"

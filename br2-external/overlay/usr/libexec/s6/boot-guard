@@ -1,16 +1,24 @@
 #!/bin/sh
-# Boot loop guard: LIMIT boots in a row that each end before STABLE seconds of
-# uptime put the display into safe mode for this boot, so a loop can't wear out
-# the panel. A trial boot is exempt: tryboot falls back on its own, never loops.
+# Boot loop guard: LIMIT unclean boots in a row that each end before STABLE
+# seconds of uptime put the display into safe mode for this boot, so a loop can't
+# wear out the panel. STABLE spans a slideshow interval: a brownout on a panel
+# refresh resets the board once per interval. A clean boot ends the streak.
+# A trial boot is exempt: tryboot falls back on its own, never loops.
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
 PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
 CMDLINE="${CMDLINE:-/proc/cmdline}"
 LIMIT="${LIMIT:-5}"
-STABLE="${STABLE:-600}"
+STABLE="${STABLE:-3600}"
 COUNT="$DATA_DIR/short_boots"
 CLEARED="$DATA_DIR/safe-mode-cleared"
+
+if [ ! -f "$RUN_DIR/unclean-boot" ]; then
+	echo 0 > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
+	rm -f "$CLEARED"
+	exit 0
+fi
 
 n=$(cat "$COUNT" 2>/dev/null || echo 0)
 case "$n" in ''|*[!0-9]*) n=0 ;; esac

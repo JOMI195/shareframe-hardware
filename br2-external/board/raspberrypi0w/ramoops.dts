@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	/* RAM that survives a warm reset (watchdog, panic) but not a power loss:
+	 * an empty pstore after an unclean boot points at the supply. Mid-RAM,
+	 * clear of the kernel at 0x8000, CMA and the firmware's top-of-RAM loads. */
+	fragment@0 {
+		target-path = "/reserved-memory";
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			ramoops@b000000 {
+				compatible = "ramoops";
+				reg = <0x0b000000 0x40000>;
+				record-size = <0x10000>;
+				console-size = <0x10000>;
+				pmsg-size = <0x10000>;
+				ecc-size = <16>;
+			};
+		};
+	};
+};
