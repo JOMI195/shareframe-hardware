@@ -1,7 +1,7 @@
 #!/bin/sh
 # Board checks before a remote reboot-class command (reboot, update, factory reset, shutdown).
-#   check  exit 1 with the reason on stdout when the board must not reboot now
-#   mark   record a remote reboot for the rate limit
+#   check [--no-rate-limit]  exit 1 with the reason on stdout when the board must not reboot now
+#   mark                     record a remote reboot for the rate limit
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
@@ -15,6 +15,7 @@ check)
 		echo "booted slot $slot is not confirmed yet; a reboot would roll the update back"
 		exit 1
 	fi
+	[ "${2:-}" = "--no-rate-limit" ] && exit 0
 	last=$(cat "$MARK" 2>/dev/null || echo 0)
 	case "$last" in ''|*[!0-9]*) last=0 ;; esac
 	now=$(date +%s)
@@ -30,7 +31,7 @@ mark)
 	date +%s > "$MARK.tmp" && mv "$MARK.tmp" "$MARK"
 	;;
 *)
-	echo "usage: shareframe-remote-gate check|mark" >&2
+	echo "usage: shareframe-remote-gate check [--no-rate-limit]|mark" >&2
 	exit 2
 	;;
 esac
