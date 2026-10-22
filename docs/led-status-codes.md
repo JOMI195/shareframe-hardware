@@ -19,7 +19,7 @@ of the pattern — count from there. `normal` is a single short blink every
 | 3 short | `wifi-down` | associated, no internet |
 | 4 short | `ap-mode` | setup access point active |
 | 1 long | `updating` | update installing — do not power off |
-| 2 long | `protected` | display safe mode after a boot or display crash loop; panel left blank |
+| 2 long | `protected` | display safe mode after a boot or display crash loop, or set remotely; panel left blank |
 | solid on | `error` | critical fault; latched until reboot |
 | off | `off` | shut down (or no power) |
 
@@ -32,11 +32,18 @@ reboot.
 
 `protected` is set when `/run/shareframe/safe-mode` exists and owns the LED
 until reboot: every other state except `updating` and `off` is ignored.
-Safe mode starts after 5 boots in a row that each end within 10 minutes
+Safe mode starts after 5 unclean boots in a row that each end within an hour
 (`boot-guard`) or 5 display crashes within 15 minutes (`display-crash-guard`).
 The display stays down while wifi, heartbeat, updates and the dashboard keep
-running. To leave it, keep the frame powered for 10 minutes, then reboot or
-replug it.
+running. It never lifts on its own. A display crash loop ends with any reboot.
+A boot loop ends with a clean reboot (remote `reboot`, `update_install`), or
+with a replug after the frame stayed powered for an hour.
+
+The `enter_safe_mode` remote command (`shareframe-safe-mode enter`) sets it
+with reason `remote` and writes `/data/shareframe/safe-mode-remote`, so it
+survives reboots. Trial boots of an update ignore it, and a committed update
+removes it. `exit_safe_mode` (`shareframe-safe-mode exit`) lifts any safe
+mode without a reboot.
 
 ## Configuration
 

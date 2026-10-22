@@ -16,7 +16,7 @@ chmod +x "$T/bin/"*
 
 export PATH="$T/bin:$PATH" DEADLINE=1
 export PENDING_FILE="$T/pending" HEALTH_JSON="$T/health.json" WIFI_JSON="$T/wifi-mode.json"
-export BACKEND_OK="$T/backend-ok" CMDLINE="$T/cmdline"
+export BACKEND_OK="$T/backend-ok" CMDLINE="$T/cmdline" REMOTE_SAFE_MODE="$T/safe-mode-remote"
 
 fresh() { # <health overall> <internet true|false> <backend-ok yes|no>
 	rm -f "$T/calls" "$BACKEND_OK"
@@ -46,9 +46,19 @@ fresh ok true yes
 "$GATE" >/dev/null
 check "healthy + backend reached commits" commit "$(outcome)"
 
+: > "$REMOTE_SAFE_MODE"
 fresh ok false no
 "$GATE" >/dev/null
 check "no internet skips the backend check" commit "$(outcome)"
+for _ in $(seq 30); do [ -f "$REMOTE_SAFE_MODE" ] || break; sleep 0.1; done
+check "commit lifts remote safe mode" no "$([ -f "$REMOTE_SAFE_MODE" ] && echo yes || echo no)"
+
+: > "$REMOTE_SAFE_MODE"
+fresh critical false no
+"$GATE" >/dev/null
+check "rollback keeps remote safe mode" reboot "$(outcome)"
+check "rollback keeps the marker" yes "$([ -f "$REMOTE_SAFE_MODE" ] && echo yes || echo no)"
+rm -f "$REMOTE_SAFE_MODE"
 
 fresh ok true no
 "$GATE" >/dev/null
