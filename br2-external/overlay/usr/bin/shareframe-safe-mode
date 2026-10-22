@@ -1,0 +1,51 @@
+#!/bin/sh
+# Remote display safe mode. The marker survives reboots: boot-guard re-applies it
+# and a committed update (rauc-mark-good) lifts it.
+#   enter  stop the display (it blanks the panel on stop) and keep it down;
+#          exit 1 with the reason on stdout when it must not
+#   exit   lift remote or automatic safe mode and start the display
+# A call with nothing to do changes nothing and says so on stdout.
+set -u
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
+CMDLINE="${CMDLINE:-/proc/cmdline}"
+SERVICE="${SERVICE:-/run/service/shareframe-display}"
+MARKER="$DATA_DIR/safe-mode-remote"
+
+case "${1:-}" in
+enter)
+	slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null)
+	if [ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ]; then
+		echo "booted slot $slot is not confirmed yet; the commit needs the display running"
+		exit 1
+	fi
+	if [ -f "$MARKER" ] && [ "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)" = remote ]; then
+		echo "already in safe mode"
+		exit 0
+	fi
+	mkdir -p "$DATA_DIR" "$RUN_DIR"
+	: > "$MARKER"
+	echo remote > "$RUN_DIR/safe-mode"
+	shareframe-event safe-mode "remote: display disabled"
+	shareframe-led protected 2>/dev/null || true
+	exec s6-svc -d "$SERVICE"
+	;;
+exit)
+	if [ ! -f "$MARKER" ] && [ ! -f "$RUN_DIR/safe-mode" ]; then
+		echo "not in safe mode"
+		exit 0
+	fi
+	mkdir -p "$DATA_DIR"
+	rm -f "$MARKER" "$RUN_DIR/safe-mode" "$RUN_DIR/safe-mode-clear" "$RUN_DIR/display-crashes" "$DATA_DIR/safe-mode-cleared"
+	# The admin vouched for the board; the next loop has to build up again.
+	echo 0 > "$DATA_DIR/short_boots.tmp" && mv "$DATA_DIR/short_boots.tmp" "$DATA_DIR/short_boots"
+	shareframe-event safe-mode "remote: display enabled"
+	shareframe-led normal 2>/dev/null || true
+	exec s6-svc -u "$SERVICE"
+	;;
+*)
+	echo "usage: shareframe-safe-mode enter|exit" >&2
+	exit 2
+	;;
+esac

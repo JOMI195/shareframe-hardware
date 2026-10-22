@@ -8,6 +8,7 @@ HEALTH_JSON="${HEALTH_JSON:-/run/shareframe/health.json}"
 WIFI_JSON="${WIFI_JSON:-/run/shareframe/wifi-mode.json}"
 BACKEND_OK="${BACKEND_OK:-/run/shareframe/backend-ok}"
 SCANDIR="${SCANDIR:-/run/service}"
+REMOTE_SAFE_MODE="${REMOTE_SAFE_MODE:-/data/shareframe/safe-mode-remote}"
 CMDLINE="${CMDLINE:-/proc/cmdline}"
 DEADLINE="${DEADLINE:-300}"   # seconds
 
@@ -36,6 +37,10 @@ booted=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE")
 			if rauc status mark-good >/dev/null 2>&1; then
 				echo "rauc-mark-good: slot $booted committed"
 				shareframe-update-history committed
+				if [ -f "$REMOTE_SAFE_MODE" ]; then
+					rm -f "$REMOTE_SAFE_MODE"
+					shareframe-event safe-mode "remote safe mode lifted by committed update"
+				fi
 			else
 				echo "rauc-mark-good: rauc mark-good failed; staying uncommitted"
 			fi

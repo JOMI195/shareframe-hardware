@@ -4,6 +4,7 @@
 # wear out the panel. STABLE spans a slideshow interval: a brownout on a panel
 # refresh resets the board once per interval. A clean boot ends the streak.
 # A trial boot is exempt: tryboot falls back on its own, never loops.
+# A remote safe mode marker (shareframe-safe-mode) keeps it on every non-trial boot.
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
@@ -13,6 +14,17 @@ LIMIT="${LIMIT:-5}"
 STABLE="${STABLE:-3600}"
 COUNT="$DATA_DIR/short_boots"
 CLEARED="$DATA_DIR/safe-mode-cleared"
+
+slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null)
+trial=0
+[ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ] && trial=1
+
+# The panel was blanked when the display stopped, so no clear is needed.
+if [ -f "$DATA_DIR/safe-mode-remote" ] && [ "$trial" = 0 ]; then
+	mkdir -p "$RUN_DIR"
+	echo remote > "$RUN_DIR/safe-mode"
+	shareframe-led protected 2>/dev/null || true
+fi
 
 if [ ! -f "$RUN_DIR/unclean-boot" ]; then
 	echo 0 > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
@@ -25,11 +37,7 @@ case "$n" in ''|*[!0-9]*) n=0 ;; esac
 n=$((n + 1))
 echo "$n" > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
 
-slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null)
-trial=0
-[ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ] && trial=1
-
-if [ "$n" -ge "$LIMIT" ] && [ "$trial" = 0 ]; then
+if [ "$n" -ge "$LIMIT" ] && [ "$trial" = 0 ] && [ ! -f "$RUN_DIR/safe-mode" ]; then
 	mkdir -p "$RUN_DIR"
 	echo boot-loop > "$RUN_DIR/safe-mode"
 	if [ ! -f "$CLEARED" ]; then
