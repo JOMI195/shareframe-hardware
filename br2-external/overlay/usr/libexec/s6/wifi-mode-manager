@@ -24,6 +24,9 @@ DROP_LIMIT=3            # connected: failed assoc checks before re-evaluating
 WEDGE_BASE=4            # connected: no-internet checks before re-associating
 WEDGE_MAX=20            # connected: cap on the wedged-link backoff threshold
 
+# Unix time of the last station attempt that fell back to AP; 0 = none since connecting.
+LAST_FAILED_AT=0
+
 log() { echo "wifi-mode-manager: $*" > /dev/console; }
 
 # Write-on-change only: avoid stomping codes others assert on top of ours.
@@ -67,7 +70,7 @@ write_mode() {
 	known="$(known_ssids)"
 	ap_creds
 	cat > "$JSON_FILE.tmp" <<EOF
-{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS"}
+{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS","last_failed_at":$LAST_FAILED_AT}
 EOF
 	mv -f "$JSON_FILE.tmp" "$JSON_FILE"
 }
@@ -106,6 +109,7 @@ wait_for_sta() {
 
 enter_connected() {
 	log "mode -> connected (ssid=$(cur_ssid))"
+	LAST_FAILED_AT=0
 	shareframe-event wifi "connected"
 	set_led normal
 	write_mode connected
@@ -194,6 +198,7 @@ while :; do
 		enter_connected
 		monitor_connected
 	else
+		LAST_FAILED_AT="$(date +%s)"
 		enter_ap
 		ap_wait_then_retry
 	fi
