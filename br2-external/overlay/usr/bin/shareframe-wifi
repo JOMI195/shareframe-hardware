@@ -13,7 +13,7 @@ die() { printf 'shareframe-wifi: %s\n' "$*" >&2; exit 1; }
 
 # True when a wpa_supplicant we can talk to is running. In AP fallback mode the
 # wifi-mode-manager stops wpa_supplicant (it can't share wlan0 with hostapd), so
-# `add` must fall back to editing the config file directly (see add_offline).
+# `add` and `del` must fall back to editing the config file directly.
 wpa_running() {
 	${WPA} ping 2>/dev/null | grep -q PONG
 }
@@ -139,8 +139,39 @@ cmd_add() {
 	printf 'added network id=%s ssid=%s\n' "$id" "$ssid"
 }
 
+# Remove the network={} block for <ssid> from the config, used when
+# wpa_supplicant is down (AP fallback mode). Rewrites in place: the conf may be
+# a bind-mount target, which a rename would detach.
+del_offline() {
+	target="$1"
+	[ -f "$CONF" ] || die "offline del: $CONF missing"
+	tmp="$CONF.tmp"
+	if ! awk -v ssid="$target" '
+		/^[[:space:]]*network=[{]/ { inblock = 1; block = $0 "\n"; drop = 0; next }
+		inblock {
+			block = block $0 "\n"
+			line = $0; sub(/^[[:space:]]*/, "", line)
+			if (line == "ssid=\"" ssid "\"") drop = 1
+			if (line == "}") { inblock = 0; if (drop) removed = 1; else printf "%s", block }
+			next
+		}
+		{ print }
+		END { exit removed ? 0 : 1 }
+	' "$CONF" > "$tmp"; then
+		rm -f "$tmp"
+		die "del: no network matching '$target'"
+	fi
+	cat "$tmp" > "$CONF"
+	rm -f "$tmp"
+	printf 'removed network (offline) ssid=%s\n' "$target"
+}
+
 cmd_del() {
 	[ $# -ge 1 ] || die "del: need <ssid|id>"
+	if ! wpa_running; then
+		del_offline "$1"
+		return 0
+	fi
 	id="$(find_id "$1")"
 	[ -n "$id" ] || die "del: no network matching '$1'"
 	wpa_ok remove_network "$id" >/dev/null
