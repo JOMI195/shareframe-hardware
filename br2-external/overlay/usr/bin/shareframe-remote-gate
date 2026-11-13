@@ -4,15 +4,13 @@
 #   mark                     record a remote reboot for the rate limit
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
-PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
 MARK="$DATA_DIR/remote-reboot-at"
 MIN_GAP="${MIN_GAP:-1800}"
 
 case "${1:-}" in
 check)
-	slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
-	if [ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ]; then
-		echo "booted slot $slot is not confirmed yet; a reboot would roll the update back"
+	if shareframe-slot trial; then
+		echo "booted slot $(shareframe-slot booted) is not confirmed yet; a reboot would roll the update back"
 		exit 1
 	fi
 	[ "${2:-}" = "--no-rate-limit" ] && exit 0

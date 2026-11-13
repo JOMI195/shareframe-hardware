@@ -1,0 +1,24 @@
+#!/bin/sh
+# A/B slot facts, so every script asks the same way.
+#   booted   print the slot this boot runs from
+#   pending  print the slot an installed update waits in; nothing when none does
+#   trial    exit 0 when this boot tries out the pending slot
+set -u
+CMDLINE="${CMDLINE:-/proc/cmdline}"
+PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
+
+booted() { sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null; }
+pending() { cat "$PENDING_FILE" 2>/dev/null || true; }
+
+case "${1:-}" in
+booted) booted ;;
+pending) pending ;;
+trial)
+	slot=$(booted)
+	[ -n "$slot" ] && [ "$(pending)" = "$slot" ]
+	;;
+*)
+	echo "usage: shareframe-slot booted|pending|trial" >&2
+	exit 2
+	;;
+esac

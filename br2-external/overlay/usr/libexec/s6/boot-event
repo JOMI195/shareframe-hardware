@@ -32,6 +32,6 @@ fi
 rm -f "$P"/* 2>/dev/null
 
 version=$(sed -n 's/^VERSION=//p' /etc/shareframe-release 2>/dev/null)
-slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
+slot=$(shareframe-slot booted)
 shareframe-event boot "version=${version:-?} slot=${slot:-?} boot_count=$boots unclean=$unclean$pstore"
 exit 0

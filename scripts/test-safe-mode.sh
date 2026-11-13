@@ -16,7 +16,7 @@ for cmd in shareframe-event shareframe-led s6-svc; do
 done
 chmod +x "$T/bin/"*
 
-export PATH="$T/bin:$PATH"
+export PATH="$T/bin:$(cd "$(dirname "$0")/.." && pwd)/br2-external/overlay/usr/bin:$PATH"
 export DATA_DIR="$T/data" RUN_DIR="$T/run" PENDING_FILE="$T/pending" CMDLINE="$T/cmdline" UPTIME="$T/uptime"
 mkdir -p "$DATA_DIR" "$RUN_DIR"
 printf 'console=ttyS1,115200 rauc.slot=A\n' > "$CMDLINE"

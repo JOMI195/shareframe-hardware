@@ -8,16 +8,13 @@
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
-PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
-CMDLINE="${CMDLINE:-/proc/cmdline}"
 LIMIT="${LIMIT:-5}"
 STABLE="${STABLE:-3600}"
 COUNT="$DATA_DIR/short_boots"
 CLEARED="$DATA_DIR/safe-mode-cleared"
 
-slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null)
 trial=0
-[ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ] && trial=1
+shareframe-slot trial && trial=1
 
 # The panel was blanked when the display stopped, so no clear is needed.
 if [ -f "$DATA_DIR/safe-mode-remote" ] && [ "$trial" = 0 ]; then

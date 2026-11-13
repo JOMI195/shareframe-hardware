@@ -8,16 +8,13 @@
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
-PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
-CMDLINE="${CMDLINE:-/proc/cmdline}"
 SERVICE="${SERVICE:-/run/service/shareframe-display}"
 MARKER="$DATA_DIR/safe-mode-remote"
 
 case "${1:-}" in
 enter)
-	slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE" 2>/dev/null)
-	if [ -n "$slot" ] && [ "$(cat "$PENDING_FILE" 2>/dev/null)" = "$slot" ]; then
-		echo "booted slot $slot is not confirmed yet; the commit needs the display running"
+	if shareframe-slot trial; then
+		echo "booted slot $(shareframe-slot booted) is not confirmed yet; the commit needs the display running"
 		exit 1
 	fi
 	if [ -f "$MARKER" ] && [ "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)" = remote ]; then
