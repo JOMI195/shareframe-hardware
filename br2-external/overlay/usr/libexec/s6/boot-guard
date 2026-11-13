@@ -13,15 +13,7 @@ STABLE="${STABLE:-3600}"
 COUNT="$DATA_DIR/short_boots"
 CLEARED="$DATA_DIR/safe-mode-cleared"
 
-trial=0
-shareframe-slot trial && trial=1
-
-# The panel was blanked when the display stopped, so no clear is needed.
-if [ -f "$DATA_DIR/safe-mode-remote" ] && [ "$trial" = 0 ]; then
-	mkdir -p "$RUN_DIR"
-	echo remote > "$RUN_DIR/safe-mode"
-	shareframe-led protected 2>/dev/null || true
-fi
+shareframe-safe-mode restore
 
 if [ ! -f "$RUN_DIR/unclean-boot" ]; then
 	echo 0 > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
@@ -34,15 +26,8 @@ case "$n" in ''|*[!0-9]*) n=0 ;; esac
 n=$((n + 1))
 echo "$n" > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
 
-if [ "$n" -ge "$LIMIT" ] && [ "$trial" = 0 ] && [ ! -f "$RUN_DIR/safe-mode" ]; then
-	mkdir -p "$RUN_DIR"
-	echo boot-loop > "$RUN_DIR/safe-mode"
-	if [ ! -f "$CLEARED" ]; then
-		: > "$RUN_DIR/safe-mode-clear"
-		: > "$CLEARED"
-	fi
-	shareframe-event safe-mode "boot loop: $n boots under ${STABLE}s; display disabled"
-	shareframe-led protected 2>/dev/null || true
+if [ "$n" -ge "$LIMIT" ]; then
+	shareframe-safe-mode trip boot-loop "boot loop: $n boots under ${STABLE}s; display disabled"
 fi
 
 (

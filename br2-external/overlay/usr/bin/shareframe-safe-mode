@@ -1,15 +1,32 @@
 #!/bin/sh
-# Remote display safe mode. The marker survives reboots: boot-guard re-applies it
-# and a committed update (rauc-mark-good) lifts it.
-#   enter  stop the display (it blanks the panel on stop) and keep it down;
-#          exit 1 with the reason on stdout when it must not
-#   exit   lift remote or automatic safe mode and start the display
-# A call with nothing to do changes nothing and says so on stdout.
+# Display safe mode: the display service stays down and the panel blank. This script is
+# the only writer of the state; the display's run and finish scripts read it.
+#   enter    remote: stop the display (it blanks the panel on stop) and keep it down
+#            across reboots; exit 1 with the reason on stdout when it must not
+#   exit     lift any safe mode and start the display
+#   restore  at boot: put a remote safe mode back in force
+#   trip <boot-loop|display-crash> <message>
+#            automatic, for this boot only
+# A call with nothing to do changes nothing; enter and exit say so on stdout.
+#
+# Rules:
+# - A reason in force is kept. Only enter turns it into remote.
+# - A trial boot of an update runs the display: the commit needs it. Only a display that
+#   keeps crashing trips there, which lets the trial roll back.
+# - A committed update lifts a remote safe mode (rauc-mark-good).
+# - An automatic trip has the panel blanked, a boot loop only once per streak.
 set -u
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
 SERVICE="${SERVICE:-/run/service/shareframe-display}"
+STATE="$RUN_DIR/safe-mode"
 MARKER="$DATA_DIR/safe-mode-remote"
+CLEARED="$DATA_DIR/safe-mode-cleared"
+
+usage() {
+	echo "usage: shareframe-safe-mode enter|exit|restore|trip <boot-loop|display-crash> <message>" >&2
+	exit 2
+}
 
 case "${1:-}" in
 enter)
@@ -17,32 +34,54 @@ enter)
 		echo "booted slot $(shareframe-slot booted) is not confirmed yet; the commit needs the display running"
 		exit 1
 	fi
-	if [ -f "$MARKER" ] && [ "$(cat "$RUN_DIR/safe-mode" 2>/dev/null)" = remote ]; then
+	if [ -f "$MARKER" ] && [ "$(cat "$STATE" 2>/dev/null)" = remote ]; then
 		echo "already in safe mode"
 		exit 0
 	fi
 	mkdir -p "$DATA_DIR" "$RUN_DIR"
 	: > "$MARKER"
-	echo remote > "$RUN_DIR/safe-mode"
+	echo remote > "$STATE"
 	shareframe-event safe-mode "remote: display disabled"
 	shareframe-led protected 2>/dev/null || true
 	exec s6-svc -d "$SERVICE"
 	;;
 exit)
-	if [ ! -f "$MARKER" ] && [ ! -f "$RUN_DIR/safe-mode" ]; then
+	if [ ! -f "$MARKER" ] && [ ! -f "$STATE" ]; then
 		echo "not in safe mode"
 		exit 0
 	fi
 	mkdir -p "$DATA_DIR"
-	rm -f "$MARKER" "$RUN_DIR/safe-mode" "$RUN_DIR/safe-mode-clear" "$RUN_DIR/display-crashes" "$DATA_DIR/safe-mode-cleared"
+	rm -f "$MARKER" "$STATE" "$RUN_DIR/safe-mode-clear" "$RUN_DIR/display-crashes" "$CLEARED"
 	# The admin vouched for the board; the next loop has to build up again.
 	echo 0 > "$DATA_DIR/short_boots.tmp" && mv "$DATA_DIR/short_boots.tmp" "$DATA_DIR/short_boots"
 	shareframe-event safe-mode "remote: display enabled"
 	shareframe-led normal 2>/dev/null || true
 	exec s6-svc -u "$SERVICE"
 	;;
+restore)
+	[ -f "$MARKER" ] || exit 0
+	shareframe-slot trial && exit 0
+	# The panel was blanked when the display stopped, so no clear is needed.
+	mkdir -p "$RUN_DIR"
+	echo remote > "$STATE"
+	shareframe-led protected 2>/dev/null || true
+	;;
+trip)
+	reason=${2:-}
+	[ $# -eq 3 ] || usage
+	case "$reason" in boot-loop|display-crash) ;; *) usage ;; esac
+	[ -f "$STATE" ] && exit 0
+	[ "$reason" = boot-loop ] && shareframe-slot trial && exit 0
+	mkdir -p "$RUN_DIR"
+	echo "$reason" > "$STATE"
+	if [ "$reason" = display-crash ] || [ ! -f "$CLEARED" ]; then
+		: > "$RUN_DIR/safe-mode-clear"
+	fi
+	[ "$reason" = boot-loop ] && : > "$CLEARED"
+	shareframe-event safe-mode "$3"
+	shareframe-led protected 2>/dev/null || true
+	;;
 *)
-	echo "usage: shareframe-safe-mode enter|exit" >&2
-	exit 2
+	usage
 	;;
 esac

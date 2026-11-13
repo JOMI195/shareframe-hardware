@@ -16,9 +16,6 @@ mv "$LOG.tmp" "$LOG"
 n=$(awk 'END { print NR }' "$LOG")
 
 if [ "$n" -ge "$LIMIT" ]; then
-	echo display-crash > "$RUN_DIR/safe-mode"
-	: > "$RUN_DIR/safe-mode-clear"
-	shareframe-event safe-mode "display crashed $n times in ${WINDOW}s; display disabled"
-	shareframe-led protected 2>/dev/null || true
+	shareframe-safe-mode trip display-crash "display crashed $n times in ${WINDOW}s; display disabled"
 fi
 exit 0
