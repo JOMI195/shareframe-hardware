@@ -21,6 +21,7 @@ EOF
 cat > "$T/bin/ip" <<EOF
 #!/bin/sh
 [ -f "$T/ctl/address" ] && echo '    inet 192.168.1.5/24 scope global wlan0'
+[ -f "$T/ctl/linklocal" ] && echo '    inet 169.254.7.7/16 scope link wlan0'
 exit 0
 EOF
 printf '#!/bin/sh\n[ -f "%s/ctl/internet" ]\n' "$T" > "$T/bin/ping"
@@ -38,7 +39,7 @@ chmod +x "$T/bin/"*
 export PATH="$T/bin:$ROOT/br2-external/overlay/usr/bin:$PATH"
 export STATE_DIR="$T/run" SVC="$T/service" CONSOLE=/dev/null STACK_RESTART="$T/bin/wifi-stack-restart"
 export AP_CONF="$T/ap.conf" WPA_CONF="$T/wpa_supplicant.conf"
-export ASSOC_TIMEOUT=4 DHCP_GRACE=4 AP_RETRY_EVERY=1000000
+export ASSOC_TIMEOUT=4 DHCP_GRACE=4 NO_ADDR_TIMEOUT=4 AP_RETRY_EVERY=1000000
 export LED="$T/led" SAFE_MODE="$T/run/safe-mode" LED_RUN="$T/run/led"
 echo 1 > "$T/led/max_brightness"
 echo "none [timer]" > "$T/led/trigger"
@@ -68,10 +69,11 @@ settle() { # <expected> <command...>
 	for _ in $(seq 100); do [ "$("$@")" = "$want" ] && break; sleep 0.1; done
 	"$@"
 }
+start() { rm -f "$T/calls" "$T/run/wifi-mode"; "$MANAGER" & pid=$!; }
+stop() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
 
 touch "$T/ctl/assoc" "$T/ctl/address" "$T/ctl/internet"
-"$MANAGER" &
-pid=$!
+start
 
 check "known network in reach: connected" connected "$(settle connected mode)"
 check "connected: ssid published" home "$(json ssid)"
@@ -106,5 +108,26 @@ check "retry: self-healing allowed again" no "$(exists "$T/run/wifi-switching")"
 check "retry: request consumed" no "$(exists "$T/run/wifi-retry-requested")"
 check "retry: failed attempt forgotten" 0 "$(settle 0 json last_failed_at)"
 check "retry: LED normal" normal "$(settle normal led)"
+
+# The network stops handing out addresses: only the self-assigned one is left.
+stop
+rm -f "$T/ctl/address" "$T/ctl/internet"
+touch "$T/ctl/linklocal"
+start
+check "leased earlier this boot, no lease now: stays a station" connected "$(settle connected mode)"
+check "leased earlier this boot: no hotspot" no "$(called 'shareframe-ap up')"
+
+# A reboot empties the state directory.
+stop
+rm -rf "$T/run"
+mkdir -p "$T/run"
+start
+check "no lease since boot: hotspot" ap "$(settle ap mode)"
+check "no lease: event names the cause" yes "$(called 'shareframe-event wifi ap fallback (no address from home)')"
+check "no lease: failed attempt published" yes "$([ "$(json last_failed_at)" -gt 0 ] && echo yes || echo no)"
+
+rm -f "$T/ctl/linklocal"
+touch "$T/ctl/address" "$T/ctl/internet" "$T/run/wifi-retry-requested"
+check "lease after a retry: connected again" connected "$(settle connected mode)"
 
 exit $fail

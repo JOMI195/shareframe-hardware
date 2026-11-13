@@ -13,13 +13,15 @@ MODE_FILE="$STATE_DIR/wifi-mode"
 JSON_FILE="$STATE_DIR/wifi-mode.json"
 RETRY_FLAG="$STATE_DIR/wifi-retry-requested"
 SWITCH_FLAG="$STATE_DIR/wifi-switching"
+LEASED_FLAG="$STATE_DIR/wifi-leased"
 AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
 WPA_CONF="${WPA_CONF:-/data/wifi/wpa_supplicant.conf}"
 CONSOLE="${CONSOLE:-/dev/console}"
 STACK_RESTART="${STACK_RESTART:-/usr/libexec/s6/wifi-stack-restart}"
 
 ASSOC_TIMEOUT="${ASSOC_TIMEOUT:-45}"       # T1: wait for *association* before falling back to AP
-DHCP_GRACE="${DHCP_GRACE:-70}"             # after assoc, best-effort wait for an IP (no AP fallback)
+DHCP_GRACE="${DHCP_GRACE:-70}"             # after assoc on a network that leased since boot: best-effort wait for an IP (no AP fallback)
+NO_ADDR_TIMEOUT="${NO_ADDR_TIMEOUT:-300}"  # after assoc with no lease since boot: wait for an IP before falling back to AP
 MONITOR_INTERVAL="${MONITOR_INTERVAL:-30}" # connected: ping / association check cadence
 AP_POLL="${AP_POLL:-5}"                    # ap: responsiveness to a dashboard retry request
 AP_RETRY_EVERY="${AP_RETRY_EVERY:-180}"    # ap: seconds between automatic station retries (>= display min_refresh_secs)
@@ -41,7 +43,8 @@ ap_creds() {
 }
 
 have_assoc() { wpa_cli -i "$IFACE" status 2>/dev/null | grep -q '^wpa_state=COMPLETED'; }
-have_ip()    { ip -4 addr show "$IFACE" 2>/dev/null | grep -q 'inet '; }
+# A self-assigned link-local address is what dhcpcd takes when no lease comes.
+have_ip()    { ip -4 addr show "$IFACE" 2>/dev/null | grep 'inet ' | grep -qv 'inet 169\.254\.'; }
 have_internet() { ping -c1 -W1 1.1.1.1 >/dev/null 2>&1; }
 cur_ssid() {
 	# Strip quotes/backslashes so the value is safe to embed in JSON.
@@ -83,10 +86,12 @@ enter_connecting() {
 	write_mode connecting
 }
 
-# Station vs AP: fall back to AP only when association fails within the timeout.
-# Once associated, treat as connected even if DHCP is pending (no false fallback).
-# Returns 0 = connected, 1 = could not associate.
+# Station vs AP: fall back to AP when association fails within the timeout, or when
+# the network has handed out no address since boot. Once it has leased, treat as
+# connected even if DHCP is pending (no false fallback).
+# Returns 0 = connected, 1 = fall back to AP.
 wait_for_sta() {
+	FALLBACK_REASON="no known wifi joined"
 	i=0
 	while [ "$i" -lt "$ASSOC_TIMEOUT" ]; do
 		have_assoc && break
@@ -94,14 +99,20 @@ wait_for_sta() {
 	done
 	have_assoc || return 1
 
-	# Associated: give DHCP a chance, but stay in station mode regardless.
+	grace=$NO_ADDR_TIMEOUT
+	[ -e "$LEASED_FLAG" ] && grace=$DHCP_GRACE
 	i=0
-	while [ "$i" -lt "$DHCP_GRACE" ]; do
-		have_ip && break
+	while [ "$i" -lt "$grace" ]; do
+		if have_ip; then
+			: > "$LEASED_FLAG"
+			return 0
+		fi
 		have_assoc || return 1   # dropped association while waiting -> re-eval
 		sleep 2; i=$((i + 2))
 	done
-	return 0
+	[ -e "$LEASED_FLAG" ] && return 0
+	FALLBACK_REASON="no address from $(cur_ssid)"
+	return 1
 }
 
 enter_connected() {
@@ -113,8 +124,8 @@ enter_connected() {
 }
 
 enter_ap() {
-	log "mode -> ap (no known wifi joined)"
-	shareframe-event wifi "ap fallback (no known wifi joined)"
+	log "mode -> ap ($FALLBACK_REASON)"
+	shareframe-event wifi "ap fallback ($FALLBACK_REASON)"
 	# Stop + pin down the station services so they don't fight the switch.
 	: > "$SWITCH_FLAG"
 	s6-svc -d "$SVC/dhcpcd-wlan"    2>/dev/null || true
