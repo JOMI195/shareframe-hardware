@@ -55,7 +55,7 @@ exit)
 	# The admin vouched for the board; the next loop has to build up again.
 	echo 0 > "$DATA_DIR/short_boots.tmp" && mv "$DATA_DIR/short_boots.tmp" "$DATA_DIR/short_boots"
 	shareframe-event safe-mode "remote: display enabled"
-	shareframe-led normal 2>/dev/null || true
+	shareframe-led refresh 2>/dev/null || true
 	exec s6-svc -u "$SERVICE"
 	;;
 restore)

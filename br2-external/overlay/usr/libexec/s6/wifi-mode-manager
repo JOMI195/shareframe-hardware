@@ -29,13 +29,7 @@ LAST_FAILED_AT=0
 
 log() { echo "wifi-mode-manager: $*" > /dev/console; }
 
-# Write-on-change only: avoid stomping codes others assert on top of ours.
-LED_STATE=
-set_led() {
-	[ "$1" = "$LED_STATE" ] && return 0
-	shareframe-led "$1" 2>/dev/null || true
-	LED_STATE="$1"
-}
+set_led() { shareframe-led "$1" 2>/dev/null || true; }
 
 ap_creds() {
 	AP_SSID=shareframe-board
@@ -157,7 +151,6 @@ monitor_connected() {
 			if [ "$wedge" -ge "$wedge_limit" ]; then
 				log "re-associating wifi (wedged link)"
 				/usr/libexec/s6/wifi-stack-restart monitor || true
-				LED_STATE=wifi-connecting   # stack-restart set the LED itself
 				wedge=0
 				wedge_limit=$((wedge_limit * 2))
 				[ "$wedge_limit" -gt "$WEDGE_MAX" ] && wedge_limit=$WEDGE_MAX

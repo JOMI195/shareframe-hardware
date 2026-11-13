@@ -99,6 +99,7 @@ for _ in 1 2 3 4 5; do boot; done
 check "remote exit: lifts boot-loop safe mode" no "$(exists "$RUN_DIR/safe-mode")"
 check "remote exit: resets the counter" 0 "$(cat "$DATA_DIR/short_boots")"
 check "remote exit: display started" yes "$(called 's6-svc -u /run/service/shareframe-display')"
+check "remote exit: the LED picks again instead of claiming all is well" yes "$(called 'shareframe-led refresh')"
 "$SAFE_CMD" enter >/dev/null
 "$SAFE_CMD" exit >/dev/null
 check "remote exit: marker removed" no "$(exists "$DATA_DIR/safe-mode-remote")"
