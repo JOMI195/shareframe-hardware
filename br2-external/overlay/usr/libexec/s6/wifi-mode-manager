@@ -5,29 +5,32 @@
 # chip can't do both). Publishes the current mode for the dashboard backend.
 set -u
 
+# Paths and timings (overridable for host tests)
 IFACE=wlan0
-SVC=/run/service
-STATE_DIR=/run/shareframe
+SVC="${SVC:-/run/service}"
+STATE_DIR="${STATE_DIR:-/run/shareframe}"
 MODE_FILE="$STATE_DIR/wifi-mode"
 JSON_FILE="$STATE_DIR/wifi-mode.json"
 RETRY_FLAG="$STATE_DIR/wifi-retry-requested"
 SWITCH_FLAG="$STATE_DIR/wifi-switching"
-AP_CONF=/data/wifi/ap.conf
-WPA_CONF=/data/wifi/wpa_supplicant.conf
+AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
+WPA_CONF="${WPA_CONF:-/data/wifi/wpa_supplicant.conf}"
+CONSOLE="${CONSOLE:-/dev/console}"
+STACK_RESTART="${STACK_RESTART:-/usr/libexec/s6/wifi-stack-restart}"
 
-ASSOC_TIMEOUT=45        # T1: wait for *association* before falling back to AP
-DHCP_GRACE=70           # after assoc, best-effort wait for an IP (no AP fallback)
-MONITOR_INTERVAL=30     # connected: ping / association check cadence
-AP_POLL=5               # ap: responsiveness to a dashboard retry request
-AP_RETRY_EVERY=180      # ap: seconds between automatic station retries (>= display min_refresh_secs)
-DROP_LIMIT=3            # connected: failed assoc checks before re-evaluating
-WEDGE_BASE=4            # connected: no-internet checks before re-associating
-WEDGE_MAX=20            # connected: cap on the wedged-link backoff threshold
+ASSOC_TIMEOUT="${ASSOC_TIMEOUT:-45}"       # T1: wait for *association* before falling back to AP
+DHCP_GRACE="${DHCP_GRACE:-70}"             # after assoc, best-effort wait for an IP (no AP fallback)
+MONITOR_INTERVAL="${MONITOR_INTERVAL:-30}" # connected: ping / association check cadence
+AP_POLL="${AP_POLL:-5}"                    # ap: responsiveness to a dashboard retry request
+AP_RETRY_EVERY="${AP_RETRY_EVERY:-180}"    # ap: seconds between automatic station retries (>= display min_refresh_secs)
+DROP_LIMIT="${DROP_LIMIT:-3}"              # connected: failed assoc checks before re-evaluating
+WEDGE_BASE="${WEDGE_BASE:-4}"              # connected: no-internet checks before re-associating
+WEDGE_MAX="${WEDGE_MAX:-20}"               # connected: cap on the wedged-link backoff threshold
 
 # Unix time of the last station attempt that fell back to AP; 0 = none since connecting.
 LAST_FAILED_AT=0
 
-log() { echo "wifi-mode-manager: $*" > /dev/console; }
+log() { echo "wifi-mode-manager: $*" > "$CONSOLE"; }
 
 set_led() { shareframe-led "$1" 2>/dev/null || true; }
 
@@ -150,7 +153,7 @@ monitor_connected() {
 			log "associated but no internet ($wedge/$wedge_limit)"
 			if [ "$wedge" -ge "$wedge_limit" ]; then
 				log "re-associating wifi (wedged link)"
-				/usr/libexec/s6/wifi-stack-restart monitor || true
+				"$STACK_RESTART" monitor || true
 				wedge=0
 				wedge_limit=$((wedge_limit * 2))
 				[ "$wedge_limit" -gt "$WEDGE_MAX" ] && wedge_limit=$WEDGE_MAX
