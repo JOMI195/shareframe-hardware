@@ -138,11 +138,12 @@ check "5th crash: panel clear requested" yes "$(exists "$RUN_DIR/safe-mode-clear
 mkdir -p "$T/led"
 echo 1 > "$T/led/max_brightness"
 echo "none [timer]" > "$T/led/trigger"
-led() { LED="$T/led" SAFE_MODE="$RUN_DIR/safe-mode" "$LED_CMD" "$1"; cat "$T/led/delay_on" 2>/dev/null; }
+led() { LED="$T/led" SAFE_MODE="$RUN_DIR/safe-mode" LED_RUN="$T/led-run" "$LED_CMD" "$1"; cat "$T/led/delay_on" 2>/dev/null; }
 check "safe mode: protected applies" 1000 "$(led protected)"
 check "safe mode: normal ignored" 1000 "$(led normal)"
 check "safe mode: off applies" 0 "$(led off >/dev/null; cat "$T/led/brightness")"
-rm -f "$RUN_DIR/safe-mode"
+# Off holds until the reboot, which also ends this safe mode.
+rm -rf "$RUN_DIR/safe-mode" "$T/led-run"
 check "no safe mode: normal applies" 200 "$(led normal)"
 
 exit $fail
