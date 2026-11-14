@@ -30,10 +30,10 @@ if [ -r /etc/shareframe-release ]; then
 fi
 
 # --- booted A/B slot (cmdline) + trial flag (staged, uncommitted tryboot) ---
-slot=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline 2>/dev/null)
+slot=$(shareframe-slot booted)
 if [ -n "$slot" ]; then
 	emit boot_slot "$slot"
-	[ "$(cat /data/rauc/pending 2>/dev/null)" = "$slot" ] && emit slot_trial true
+	shareframe-slot trial && emit slot_trial true
 fi
 
 # --- hardware identity ---

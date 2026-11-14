@@ -16,7 +16,7 @@ for cmd in shareframe-event shareframe-led s6-svc; do
 done
 chmod +x "$T/bin/"*
 
-export PATH="$T/bin:$PATH"
+export PATH="$T/bin:$(cd "$(dirname "$0")/.." && pwd)/br2-external/overlay/usr/bin:$PATH"
 export DATA_DIR="$T/data" RUN_DIR="$T/run" PENDING_FILE="$T/pending" CMDLINE="$T/cmdline" UPTIME="$T/uptime"
 mkdir -p "$DATA_DIR" "$RUN_DIR"
 printf 'console=ttyS1,115200 rauc.slot=A\n' > "$CMDLINE"
@@ -99,6 +99,7 @@ for _ in 1 2 3 4 5; do boot; done
 check "remote exit: lifts boot-loop safe mode" no "$(exists "$RUN_DIR/safe-mode")"
 check "remote exit: resets the counter" 0 "$(cat "$DATA_DIR/short_boots")"
 check "remote exit: display started" yes "$(called 's6-svc -u /run/service/shareframe-display')"
+check "remote exit: the LED picks again instead of claiming all is well" yes "$(called 'shareframe-led refresh')"
 "$SAFE_CMD" enter >/dev/null
 "$SAFE_CMD" exit >/dev/null
 check "remote exit: marker removed" no "$(exists "$DATA_DIR/safe-mode-remote")"
@@ -138,11 +139,12 @@ check "5th crash: panel clear requested" yes "$(exists "$RUN_DIR/safe-mode-clear
 mkdir -p "$T/led"
 echo 1 > "$T/led/max_brightness"
 echo "none [timer]" > "$T/led/trigger"
-led() { LED="$T/led" SAFE_MODE="$RUN_DIR/safe-mode" "$LED_CMD" "$1"; cat "$T/led/delay_on" 2>/dev/null; }
+led() { LED="$T/led" SAFE_MODE="$RUN_DIR/safe-mode" LED_RUN="$T/led-run" "$LED_CMD" "$1"; cat "$T/led/delay_on" 2>/dev/null; }
 check "safe mode: protected applies" 1000 "$(led protected)"
 check "safe mode: normal ignored" 1000 "$(led normal)"
 check "safe mode: off applies" 0 "$(led off >/dev/null; cat "$T/led/brightness")"
-rm -f "$RUN_DIR/safe-mode"
+# Off holds until the reboot, which also ends this safe mode.
+rm -rf "$RUN_DIR/safe-mode" "$T/led-run"
 check "no safe mode: normal applies" 200 "$(led normal)"
 
 exit $fail

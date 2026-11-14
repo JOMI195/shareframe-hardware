@@ -14,7 +14,7 @@ printf '#!/bin/sh\necho true\n' > "$T/bin/s6-svstat"
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/shareframe-update-verify"
 chmod +x "$T/bin/"*
 
-export PATH="$T/bin:$PATH" DEADLINE=1
+export PATH="$T/bin:$(cd "$(dirname "$0")/.." && pwd)/br2-external/overlay/usr/bin:$PATH" DEADLINE=1
 export PENDING_FILE="$T/pending" HEALTH_JSON="$T/health.json" WIFI_JSON="$T/wifi-mode.json"
 export BACKEND_OK="$T/backend-ok" CMDLINE="$T/cmdline" REMOTE_SAFE_MODE="$T/safe-mode-remote"
 

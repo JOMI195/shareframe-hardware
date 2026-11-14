@@ -3,13 +3,10 @@
 # booted slot means the tryboot attempt failed: mark it bad (never auto-retry)
 # and record the rollback for the dashboard.
 set -u
-PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
-
-pending=$(cat "$PENDING_FILE" 2>/dev/null || true)
+pending=$(shareframe-slot pending)
 [ -n "$pending" ] || exit 0
-
-booted=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' /proc/cmdline)
-[ "$pending" = "$booted" ] && exit 0   # tryboot attempt running; mark-good decides
+shareframe-slot trial && exit 0   # tryboot attempt running; mark-good decides
+booted=$(shareframe-slot booted)
 
 echo "rauc-reconcile: staged slot $pending never came up (booted $booted); rolling back"
 rauc status mark-bad other 2>/dev/null || {

@@ -3,19 +3,15 @@
 # (booted == pending): waits for the app + health to look sane, then mark-good
 # (commit). If the gate never passes, reboots, which rolls back. Backgrounded.
 set -u
-PENDING_FILE="${PENDING_FILE:-/data/rauc/pending}"
 HEALTH_JSON="${HEALTH_JSON:-/run/shareframe/health.json}"
 WIFI_JSON="${WIFI_JSON:-/run/shareframe/wifi-mode.json}"
 BACKEND_OK="${BACKEND_OK:-/run/shareframe/backend-ok}"
 SCANDIR="${SCANDIR:-/run/service}"
 REMOTE_SAFE_MODE="${REMOTE_SAFE_MODE:-/data/shareframe/safe-mode-remote}"
-CMDLINE="${CMDLINE:-/proc/cmdline}"
 DEADLINE="${DEADLINE:-300}"   # seconds
 
-pending=$(cat "$PENDING_FILE" 2>/dev/null || true)
-[ -n "$pending" ] || exit 0
-booted=$(sed -n 's/.*rauc\.slot=\([AB]\).*/\1/p' "$CMDLINE")
-[ "$pending" = "$booted" ] || exit 0   # rauc-reconcile handles the mismatch
+shareframe-slot trial || exit 0   # rauc-reconcile handles a pending slot that didn't boot
+booted=$(shareframe-slot booted)
 
 (
 	waited=0

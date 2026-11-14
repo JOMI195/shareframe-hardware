@@ -25,13 +25,24 @@ of the pattern — count from there. `normal` is a single short blink every
 
 ## Ownership
 
-The wifi manager owns the wifi/normal codes and writes only on change.
-`error` and `updating` are asserted on top and survive; `error` latches
-until reboot. `off` is written on shutdown and right before the post-update
-reboot.
+`shareframe-led` is the only writer of the LED. A caller claims a state,
+the script keeps the claims under `/run/shareframe/led/` and shows the
+highest one. A reboot clears them all.
 
-`protected` is set when `/run/shareframe/safe-mode` exists and owns the LED
-until reboot: every other state except `updating` and `off` is ignored.
+| Rank | Shown | Claimed by | Held until |
+|---|---|---|---|
+| 1 | `off` | shutdown | reboot |
+| 2 | `updating` | update service | `update-done` or `update-failed` |
+| 3 | `protected` | nobody: read from `/run/shareframe/safe-mode` | safe mode ends |
+| 4 | `error` | health daemon, OOM notifier, `update-failed`, a failed post-update reboot | reboot |
+| 5 | `booting`, `normal`, `wifi-connecting`, `wifi-down`, `ap-mode` | boot, wifi manager | the next of these |
+
+A lower claim is remembered while a higher one shows, so the code is right
+again the moment the higher one ends. The LED is only written when the
+winner changes; repeating a state does not restart its pattern.
+`shareframe-led refresh` picks again without claiming anything, for callers
+that changed safe mode.
+
 Safe mode starts after 5 unclean boots in a row that each end within an hour
 (`boot-guard`) or 5 display crashes within 15 minutes (`display-crash-guard`).
 The display stays down while wifi, heartbeat, updates and the dashboard keep

@@ -1,12 +1,22 @@
 #!/bin/sh
-# Blink codes are documented in docs/led-status-codes.md.
+# The only writer of the ACT LED. Callers claim a state; the highest standing claim
+# shows. Claims live in /run, so a reboot starts clean. Blink codes and the order are
+# documented in docs/led-status-codes.md.
+#   booting|normal|wifi-connecting|wifi-down|ap-mode   the link code; the last one counts
+#   error                          stays until the reboot
+#   updating                       until update-done or update-failed (which adds error)
+#   off                            stays until the reboot
+#   protected|refresh              claim nothing, pick again (safe mode is read from its file)
 set -eu
 LED="${LED:-/sys/class/leds/ACT}"
 SAFE_MODE="${SAFE_MODE:-/run/shareframe/safe-mode}"
+LED_RUN="${LED_RUN:-/run/shareframe/led}"
 die() { printf 'shareframe-led: %s\n' "$*" >&2; exit 1; }
 [ $# -eq 1 ] || die "usage: shareframe-led <state>"
-# Safe mode owns the LED; other writers become no-ops.
-case "$1" in protected|updating|off) ;; *) [ -f "$SAFE_MODE" ] && exit 0 ;; esac
+case "$1" in
+    booting|normal|wifi-connecting|wifi-down|ap-mode|error|updating|update-done|update-failed|off|protected|refresh) ;;
+    *) die "unknown state: $1" ;;
+esac
 [ -d "$LED" ] || die "ACT LED not found"
 
 # Defaults; overridable via led.conf (shell assignments only, /data wins).
@@ -40,27 +50,61 @@ code() { # $1=#long $2=#short $3=restart-gap-ms $4=fallback-delay-on $5=fallback
     fi
 }
 
-case "$1" in
-    booting)
-        echo heartbeat > "$LED/trigger" ;;
-    normal)
-        # State vars hold "<#long> <#short>" and split into two args here.
-        code $NORMAL "$NORMAL_CYCLE" 200 9800 ;;
-    wifi-connecting)
-        code $WIFI_CONNECTING "$CYCLE" 200 200 ;;
-    wifi-down)
-        code $WIFI_DOWN "$CYCLE" 500 2000 ;;
-    ap-mode)
-        code $AP_MODE "$CYCLE" 800 800 ;;
-    updating)
-        code $UPDATING "$CYCLE" 50 50 ;;
-    protected)
-        code $PROTECTED "$CYCLE" 1000 1000 ;;
-    error)
-        echo none    > "$LED/trigger"
-        echo "$MAXB" > "$LED/brightness" ;;
-    off)
-        echo none > "$LED/trigger"
-        echo 0    > "$LED/brightness" ;;
-    *) die "unknown state: $1" ;;
-esac
+claim() {
+    case "$1" in
+        booting|normal|wifi-connecting|wifi-down|ap-mode) echo "$1" > "$LED_RUN/link" ;;
+        error)         : > "$LED_RUN/error" ;;
+        updating)      : > "$LED_RUN/updating" ;;
+        update-done)   rm -f "$LED_RUN/updating" ;;
+        update-failed) rm -f "$LED_RUN/updating"; : > "$LED_RUN/error" ;;
+        off)           : > "$LED_RUN/off" ;;
+    esac
+}
+
+# The highest standing claim; nothing before the first link code of this boot.
+winner() {
+    if   [ -f "$LED_RUN/off" ];      then echo off
+    elif [ -f "$LED_RUN/updating" ]; then echo updating
+    elif [ -f "$SAFE_MODE" ];        then echo protected
+    elif [ -f "$LED_RUN/error" ];    then echo error
+    else cat "$LED_RUN/link" 2>/dev/null || true
+    fi
+}
+
+show() {
+    case "$1" in
+        booting)
+            echo heartbeat > "$LED/trigger" ;;
+        normal)
+            # State vars hold "<#long> <#short>" and split into two args here.
+            code $NORMAL "$NORMAL_CYCLE" 200 9800 ;;
+        wifi-connecting)
+            code $WIFI_CONNECTING "$CYCLE" 200 200 ;;
+        wifi-down)
+            code $WIFI_DOWN "$CYCLE" 500 2000 ;;
+        ap-mode)
+            code $AP_MODE "$CYCLE" 800 800 ;;
+        updating)
+            code $UPDATING "$CYCLE" 50 50 ;;
+        protected)
+            code $PROTECTED "$CYCLE" 1000 1000 ;;
+        error)
+            echo none    > "$LED/trigger"
+            echo "$MAXB" > "$LED/brightness" ;;
+        off)
+            echo none > "$LED/trigger"
+            echo 0    > "$LED/brightness" ;;
+    esac
+}
+
+mkdir -p "$LED_RUN"
+{
+    flock 9
+    claim "$1"
+    next=$(winner)
+    # Writing a code again would restart its blink pattern.
+    if [ -n "$next" ] && [ "$next" != "$(cat "$LED_RUN/shown" 2>/dev/null || true)" ]; then
+        show "$next"
+        echo "$next" > "$LED_RUN/shown"
+    fi
+} 9>> "$LED_RUN/lock"
