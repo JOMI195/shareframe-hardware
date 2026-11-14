@@ -12,6 +12,7 @@ for cmd in rauc shareframe-update-history shareframe-event reboot; do
 done
 printf '#!/bin/sh\necho true\n' > "$T/bin/s6-svstat"
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/shareframe-update-verify"
+printf '#!/bin/sh\nexit "$(cat "%s/curl-rc")"\n' "$T" > "$T/bin/curl"
 chmod +x "$T/bin/"*
 
 export PATH="$T/bin:$(cd "$(dirname "$0")/.." && pwd)/br2-external/overlay/usr/bin:$PATH" DEADLINE=1
@@ -25,6 +26,7 @@ fresh() { # <health overall> <internet true|false> <backend-ok yes|no>
 	printf '{"overall":"%s"}\n' "$1" > "$HEALTH_JSON"
 	printf '{"mode":"connected","internet":%s}\n' "$2" > "$WIFI_JSON"
 	[ "$3" = yes ] && : > "$BACKEND_OK"
+	echo 0 > "$T/curl-rc"
 	return 0
 }
 
@@ -68,6 +70,11 @@ check "timeout is logged as event" yes "$(grep -q '^shareframe-event update comm
 fresh critical false no
 "$GATE" >/dev/null
 check "critical health reboots" reboot "$(outcome)"
+
+fresh ok true yes
+echo 7 > "$T/curl-rc"
+"$GATE" >/dev/null
+check "unreachable dashboard reboots" reboot "$(outcome)"
 
 fresh ok true yes
 echo A > "$PENDING_FILE"
