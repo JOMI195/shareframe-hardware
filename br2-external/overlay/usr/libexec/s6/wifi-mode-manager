@@ -17,6 +17,7 @@ LEASED_FLAG="$STATE_DIR/wifi-leased"
 AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
 WPA_CONF="${WPA_CONF:-/data/wifi/wpa_supplicant.conf}"
 CONSOLE="${CONSOLE:-/dev/console}"
+LOGGER="${LOGGER:-logger}"
 STACK_RESTART="${STACK_RESTART:-/usr/libexec/s6/wifi-stack-restart}"
 
 ASSOC_TIMEOUT="${ASSOC_TIMEOUT:-45}"       # T1: wait for *association* before falling back to AP
@@ -32,7 +33,10 @@ WEDGE_MAX="${WEDGE_MAX:-20}"               # connected: cap on the wedged-link b
 # Unix time of the last station attempt that fell back to AP; 0 = none since connecting.
 LAST_FAILED_AT=0
 
-log() { echo "wifi-mode-manager: $*" > "$CONSOLE"; }
+log() {
+	echo "wifi-mode-manager: $*" > "$CONSOLE"
+	"$LOGGER" -t wifi-mode-manager "$*" 2>/dev/null || true
+}
 
 set_led() { shareframe-led "$1" 2>/dev/null || true; }
 

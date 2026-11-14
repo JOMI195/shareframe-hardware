@@ -37,7 +37,7 @@ printf '#!/bin/sh\nexec /usr/bin/sleep 0.03\n' > "$T/bin/sleep"
 chmod +x "$T/bin/"*
 
 export PATH="$T/bin:$ROOT/br2-external/overlay/usr/bin:$PATH"
-export STATE_DIR="$T/run" SVC="$T/service" CONSOLE=/dev/null STACK_RESTART="$T/bin/wifi-stack-restart"
+export STATE_DIR="$T/run" SVC="$T/service" CONSOLE=/dev/null LOGGER=true STACK_RESTART="$T/bin/wifi-stack-restart"
 export AP_CONF="$T/ap.conf" WPA_CONF="$T/wpa_supplicant.conf"
 export ASSOC_TIMEOUT=4 DHCP_GRACE=4 NO_ADDR_TIMEOUT=4 AP_RETRY_EVERY=1000000
 export LED="$T/led" SAFE_MODE="$T/run/safe-mode" LED_RUN="$T/run/led"
