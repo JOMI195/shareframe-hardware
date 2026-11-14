@@ -97,6 +97,45 @@ function toolchain() {
       "$marker"
 }
 
+# Buildroot keeps an already built package when only its options change, so the
+# image ships the old binary against a config that expects the new one.
+function dirclean_reconfigured_packages() {
+    local src_dir="$1"
+    local snapshot="$src_dir/output/.config.built"
+    [ -f "$snapshot" ] || {
+        echo "=== No config snapshot from a previous build; package option changes not checked ==="; return 0; }
+
+    local changed
+    changed="$(diff \
+        <(grep -E '^(# )?BR2_PACKAGE_' "$snapshot" | sort) \
+        <(grep -E '^(# )?BR2_PACKAGE_' "$src_dir/.config" | sort) \
+        | sed -nE 's/^[<>] (# )?(BR2_PACKAGE_[A-Za-z0-9_]+).*/\2/p' | sort -u || true)"
+    [ -n "$changed" ] || return 0
+
+    local packages
+    packages="$(make -C "$src_dir" -s --no-print-directory printvars VARS=PACKAGES RAW_VARS=YES \
+        | sed 's/^PACKAGES=//')"
+
+    local sym pkg pkg_sym best
+    local -A to_clean=()
+    for sym in $changed; do
+        best=""
+        for pkg in $packages; do
+            [[ "$pkg" == host-* ]] && continue
+            pkg_sym="BR2_PACKAGE_$(printf '%s' "$pkg" | tr 'a-z-' 'A-Z_')"
+            if [[ "$sym" == "$pkg_sym" || "$sym" == "${pkg_sym}_"* ]] && [ ${#pkg} -gt ${#best} ]; then
+                best="$pkg"
+            fi
+        done
+        [ -n "$best" ] && to_clean[$best]=1
+    done
+
+    for pkg in "${!to_clean[@]}"; do
+        echo "=== Rebuild $pkg: options changed ==="
+        make -C "$src_dir" "$pkg-dirclean"
+    done
+}
+
 function buildroot() {
     local config="buildroot-rpi0w"
     local config_dir="${1:-}"
@@ -182,6 +221,7 @@ function buildroot() {
     fi
 
     make -C "$src_dir" olddefconfig
+    dirclean_reconfigured_packages "$src_dir"
 
     echo "=== Build Buildroot ==="
     # Drop stale config overlays before reinstall
@@ -196,6 +236,7 @@ function buildroot() {
     done
 
     make -C "$src_dir" -j"$(nproc)"
+    cp "$src_dir/.config" "$src_dir/output/.config.built"
 
     echo "=== Extract generated files ==="
     local img="$src_dir/output/images"
