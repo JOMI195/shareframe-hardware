@@ -3,6 +3,7 @@
 # CONFIG_FB is not set
 # CONFIG_SOUND is not set
 # CONFIG_BCM2835_VCHIQ is not set
+# CONFIG_BT is not set
 
 # --- Pi Zero W braucht: Serial-Konsole (ttyAMA0) ---
 CONFIG_SERIAL_AMBA_PL011=y
