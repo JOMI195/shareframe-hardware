@@ -3,4 +3,4 @@ sleep 1
 until [ -e /sys/class/net/wlan0 ]; do sleep 2; done
 mkdir -p /var/run/wpa_supplicant
 # Config lives on /data so saved networks persist across reboots and A/B switches.
-exec wpa_supplicant -i wlan0 -c /data/wifi/wpa_supplicant.conf -D nl80211
+exec wpa_supplicant -s -i wlan0 -c /data/wifi/wpa_supplicant.conf -D nl80211

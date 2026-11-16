@@ -3,6 +3,9 @@
 # No secrets: wpa/ap.conf/.env/DB/images are never read, credential-looking values are masked.
 set -u
 LINES="${LINES:-300}"
+# About a day of the chattier logs; the server takes up to 256 KB compressed.
+LOG_LINES="${LOG_LINES:-1000}"
+SYSLOG_LINES="${SYSLOG_LINES:-2000}"
 
 [ "${1:-}" = "--out" ] && { exec > "${2:?--out needs a file}"; }
 
@@ -24,10 +27,13 @@ collect() {
 		printf -- '--- %s\n' "${f##*/}"; tail -n "$LINES" "$f"
 	done
 	section dmesg;          dmesg | tail -n "$LINES"
-	section syslog;         tail -n "$LINES" /var/log/messages
+	# Reads the rotated file too and drops dhcpcd's repeating complaint about a router option.
+	section syslog
+	cat /var/log/messages.0 /var/log/messages 2>/dev/null \
+		| grep -v 'malformed embedded option' | tail -n "$SYSLOG_LINES"
 	for f in /var/log/shareframe/*.log; do
 		[ -f "$f" ] || continue
-		section "${f##*/}"; tail -n "$LINES" "$f"
+		section "${f##*/}"; tail -n "$LOG_LINES" "$f"
 	done
 }
 
