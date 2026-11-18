@@ -39,11 +39,13 @@ FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         bats bats-assert bats-file bats-support \
         ca-certificates dosfstools execline fdisk gcc git jq libc6-dev mtools openssl procps python3 rauc s6 \
-        shellcheck squashfs-tools \
+        curl iproute2 nginx shellcheck squashfs-tools \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=busybox /opt/busybox /opt/busybox
 COPY --from=s6rc /opt/s6-rc /opt/s6-rc
 # Like the board: #!/bin/sh is busybox ash.
 RUN ln -sf /opt/busybox/bin/busybox /bin/sh
+# Mount points the integration tier binds the image's files over.
+RUN mkdir -p /usr/share/shareframe
 ENV BATS_LIB_PATH=/usr/lib/bats HOME=/tmp
 WORKDIR /src

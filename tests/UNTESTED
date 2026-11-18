@@ -12,7 +12,7 @@ br2-external/overlay/usr/libexec/s6/load-brcmfmac         hardware  modprobe and
 br2-external/overlay/usr/libexec/s6/wpa_supplicant        system    execs wpa_supplicant (hwsim in the simulator)
 br2-external/overlay/usr/libexec/s6/dhcpcd-wlan           system    execs dhcpcd on wlan0
 br2-external/overlay/usr/libexec/s6/dnsmasq-ap            system    execs dnsmasq for the hotspot; a phone joins it in network.system.spec
-br2-external/overlay/usr/libexec/s6/udhcpd-usb0           system    execs udhcpd on usb0
+br2-external/overlay/usr/libexec/s6/udhcpd-usb0           integration  execs udhcpd; its config and setup-usb0 lease to a peer in usb0.bats
 br2-external/overlay/usr/libexec/s6/generate-dropbear-keys system   dropbearkey on first boot
 br2-external/package/shareframe-initramfs/rootfs/init     system    mounts the A/B slot and switch_roots; every simulator boot runs it
 br2-external/package/shareframe-init/skel/rc.init         system    s6-linux-init stage 1

@@ -9,7 +9,8 @@ there); the system tier here runs both repos together.
 ./test.sh unit          # lint + one .bats per script, seconds
 ./test.sh contract      # formats shared with shareframe-board, both directions
 ./test.sh build         # release + provisioning tools, s6-rc graph, kernel patches
-./test.sh all           # lint + unit + contract + build, about a minute
+./test.sh integration   # nginx and the USB link's DHCP in rootless namespaces
+./test.sh all           # lint + unit + contract + build + integration, about a minute
 ./test.sh everything    # all, then shareframe-board's ./test.sh all, then system
 ./test.sh shell         # a shell in the test container, repo at /src (read-only)
 ./test.sh system        # real image under QEMU (see "System tier"), slow
@@ -92,6 +93,21 @@ repos in one go.
   and every script an `up`/`run`/`finish` calls exists and can run.
 - `kernel-patches.bats`: the patches are applied in Buildroot's kernel tree. Without
   `build/buildroot` it skips; `./test.sh build --strict` fails instead.
+
+## Integration tier
+
+`tests/integration/`: real daemons with the image's config, each scenario a script inside
+`in_ns` (`tests/support/ns.bash`: `unshare -rmn`, root mapped to your user). It binds the
+image's files over their paths and wires veth pairs; peers are entered with `nsenter --net`
+(`ip netns exec` wants to remount `/sys`, which a container refuses). The container gets
+`seccomp`, `apparmor` and `label` relaxed, never `--privileged` or devices.
+
+- `nginx.bats`: the dashboard SPA and its client routes, `/api` to the backend, the
+  board's JSON envelope when the backend is down, the captive-portal probes, SSDP.
+- `usb0.bats`: `setup-usb0` and the image's `udhcpd.conf` lease 10.55.0.2 to the
+  computer on the cable, without a router or DNS.
+
+Wi-Fi daemons, the card's mounts and hwsim stay in the system tier.
 
 ## System tier
 

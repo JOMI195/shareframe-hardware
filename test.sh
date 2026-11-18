@@ -17,7 +17,8 @@ Usage: ./test.sh <command> [--keep] [extra args]
                 board's goldens fed to these scripts (needs ../shareframe-board)
   contract --update-golden   rewrite this repo's goldens from what the scripts produce now
   build         release and provisioning tools, the s6-rc graph, kernel patches (--strict: no skips)
-  all           lint, unit, contract, build
+  integration   real daemons and mounts in rootless namespaces: nginx, the USB link's DHCP
+  all           lint, unit, contract, build, integration
   everything    all, then ../shareframe-board/test.sh all, then system; a summary at the end
   shell         a shell in the test container, repo at /src (read-only)
   system        real image under QEMU: up → tests/system/specs → down
@@ -89,6 +90,14 @@ run_contract() {
         bats -r --filter-tags contract --report-formatter junit --output /reports "${rest[@]}" tests/unit tests/contract
 }
 
+# User, mount and network namespaces inside the container: no --privileged, no devices.
+run_integration() {
+    rm -rf "$REPORTS/integration" && mkdir -p "$REPORTS/integration"
+    in_container -v "$REPORTS/integration:/reports" --security-opt seccomp=unconfined \
+        --security-opt apparmor=unconfined --security-opt label=disable -- \
+        bats -r --report-formatter junit --output /reports "${args[@]}" tests/integration
+}
+
 run_build() {
     local strict=() rest=()
     for a in "${args[@]}"; do
@@ -103,13 +112,14 @@ run_build() {
 run_everything() {
     local stage status=0 results=()
     args=()
-    for stage in "lint" "unit" "contract" "build" "board" "system"; do
+    for stage in "lint" "unit" "contract" "build" "integration" "board" "system"; do
         local rc=0
         case "$stage" in
             lint) run_lint || rc=$? ;;
             unit) run_unit || rc=$? ;;
             contract) run_contract || rc=$? ;;
             build) run_build || rc=$? ;;
+            integration) run_integration || rc=$? ;;
             board) "$BOARD/test.sh" all || rc=$? ;;
             system) run_system || rc=$? ;;
         esac
@@ -141,7 +151,8 @@ case "$cmd" in
     unit) run_lint && run_unit ;;
     contract) run_contract ;;
     build) run_build ;;
-    all) run_lint && run_unit && run_contract && run_build ;;
+    all) run_lint && run_unit && run_contract && run_build && run_integration ;;
+    integration) run_integration ;;
     everything) run_everything ;;
     shell) in_container -- bash ;;
     system)
