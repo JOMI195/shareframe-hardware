@@ -4,16 +4,18 @@
 # frame id; paste the public key into the Frame admin of the server.
 # usage: gen-device-key.sh --device configs/per-device/<dev> [--force]
 #        gen-device-key.sh --selftest
+#        gen-device-key.sh --identity <base64 seed>   print public_key= and frame_id=
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-DEVICE="" FORCE=0 SELFTEST=0
+DEVICE="" FORCE=0 SELFTEST=0 IDENTITY=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--device)   DEVICE="$2"; shift 2 ;;
 		--force)    FORCE=1; shift ;;
 		--selftest) SELFTEST=1; shift ;;
+		--identity) IDENTITY="$2"; shift 2 ;;
 		*) echo "gen-device-key: unknown arg $1" >&2; exit 1 ;;
 	esac
 done
@@ -36,6 +38,12 @@ digest = hashlib.sha256(base64.b64decode(os.environ["PUBLIC_KEY"])).digest()[:10
 b32 = base64.b32encode(digest).decode().rstrip("=")
 print("-".join(b32[i:i + 4] for i in range(0, len(b32), 4)))'
 }
+
+if [ -n "${IDENTITY}" ]; then
+	pub="$(public_key "${IDENTITY}")"
+	printf 'public_key=%s\nframe_id=%s\n' "${pub}" "$(fingerprint "${pub}")"
+	exit 0
+fi
 
 if [ "${SELFTEST}" = 1 ]; then
 	# seed-frame-alice-living from shareframe seed-data.
