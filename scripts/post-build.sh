@@ -71,7 +71,7 @@ mv "${BASE_DTB}.tmp" "${BASE_DTB}"
 echo "=== Post-build: ramoops merged into ${BASE_DTB} ==="
 
 # Buildroot never cleans output/target; the kernel ships in boot.tar, not /boot.
-rm -rf "${TARGET_DIR}/boot"
+rm -rf "${TARGET_DIR:?}/boot"
 
 # Per-commit LOCALVERSION leaves one modules dir per old build; keep the live one.
 KREL="$(cat "${BUILD_DIR}"/linux-[0-9]*/include/config/kernel.release 2>/dev/null || true)"

@@ -13,6 +13,7 @@ while [ ! -e "$FLAG" ]; do sleep 1; done
 
 AP_SSID=shareframe-board
 AP_PASS=
+# shellcheck source=/dev/null
 [ -f "$AP_CONF" ] && . "$AP_CONF"
 
 {
