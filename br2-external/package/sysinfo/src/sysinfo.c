@@ -15,13 +15,11 @@
 #ifndef EMITTER
 #define EMITTER  "/usr/bin/shareframe-sysinfo"
 #endif
-#define MAX_KV   64
-
 /* parsed key=value store */
 
 struct kv { char *k; char *v; };
-static struct kv g_kv[MAX_KV];
-static int       g_kvn;
+static struct kv *g_kv;
+static int        g_kvn, g_kvcap;
 
 static const char *val(const char *key)
 {
@@ -38,7 +36,7 @@ static void ingest(void)
 		return;
 
 	char line[512];
-	while (g_kvn < MAX_KV && fgets(line, sizeof line, fp)) {
+	while (fgets(line, sizeof line, fp)) {
 		char *nl = strchr(line, '\n');
 		if (nl)
 			*nl = '\0';
@@ -46,6 +44,14 @@ static void ingest(void)
 		if (!eq || eq == line)
 			continue;
 		*eq = '\0';
+		if (g_kvn == g_kvcap) {
+			int cap = g_kvcap ? g_kvcap * 2 : 128;
+			struct kv *grown = realloc(g_kv, (size_t)cap * sizeof *grown);
+			if (!grown)
+				break;
+			g_kv = grown;
+			g_kvcap = cap;
+		}
 		char *k = strdup(line);
 		char *v = strdup(eq + 1);
 		if (k && v) {
