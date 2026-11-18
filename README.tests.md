@@ -28,8 +28,16 @@ tests/
    ├─ bin/          br2-external/overlay/usr/bin
    ├─ s6/           br2-external/overlay/usr/libexec/s6
    ├─ rauc/         br2-external/package/shareframe-rauc/files
-   └─ scripts/      host tooling in scripts/ and automation.sh
+   ├─ init/         shareframe-init's skel scripts and the dhcpcd hook
+   ├─ lib/          br2-external/overlay/usr/lib/shareframe/lib.sh
+   ├─ sysinfo/      the sysinfo banner, compiled for the host
+   ├─ scripts/      host tooling in scripts/ and automation.sh
+   └─ inventory.bats  every script has a test or a line in tests/UNTESTED
 ```
+
+`tests/UNTESTED` names each script without a unit test, the tier that covers it (`system`,
+`integration`, `hardware`) and why: mounts of the real card, daemons that only `exec`, the
+initramfs. A new script gets a `.bats` file or a line there, or `inventory.bats` fails.
 
 **Which tier?** One script against stubbed commands and a temp tree → unit. Real mounts,
 network namespaces or daemons talking to each other → integration. The real image → system.
