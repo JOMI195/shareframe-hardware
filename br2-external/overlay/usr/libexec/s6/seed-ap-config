@@ -3,37 +3,41 @@
 # so a provisioned value survives reboots and A/B switches. Source order: staged
 # factory store (p5), per-device derivation from the board serial, .template.
 set -e
-DEST=/data/wifi/ap.conf
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
+DEST="${AP_CONF:-/data/wifi/ap.conf}"
+FACTORY="${FACTORY_DIR:-/run/shareframe/factory}"
+SHARE="${SHARE_DIR:-/usr/share/shareframe}"
+CONSOLE="${CONSOLE:-/dev/console}"
 
-mkdir -p /data/wifi
+mkdir -p "$(dirname "$DEST")"
 [ -f "$DEST" ] && exit 0
 
-if [ -f /run/shareframe/factory/ap.conf ]; then
-	cp /run/shareframe/factory/ap.conf "$DEST"
+if [ -f "$FACTORY/ap.conf" ]; then
+	cp "$FACTORY/ap.conf" "$DEST"
 	chmod 0600 "$DEST"
 	exit 0
 fi
 
-# Per-device: derive a stable SSID suffix + WPA2 passphrase from the Pi serial.
-serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+# Per-device: the SSID is the board's name; the WPA2 passphrase derives from the Pi serial.
+serial="$(board_serial)"
 if [ -n "$serial" ]; then
-	suffix="$(printf '%s' "$serial" | tail -c 4 | tr 'a-f' 'A-F')"
 	# Salt keeps the password from being a bare hash of a public serial.
 	pass="$(printf 'shareframe-ap:%s' "$serial" | sha256sum | cut -c1-10)"
 	{
 		echo "# Per-device AP-fallback credentials (derived from board serial)."
-		echo "AP_SSID=shareframe-board-${suffix}"
+		echo "AP_SSID=$(board_name)"
 		echo "AP_PASS=${pass}"
 	} > "$DEST"
 	chmod 0600 "$DEST"
 	exit 0
 fi
 
-if [ -f /usr/share/shareframe/ap.conf.template ]; then
-	cp /usr/share/shareframe/ap.conf.template "$DEST"
+if [ -f "$SHARE/ap.conf.template" ]; then
+	cp "$SHARE/ap.conf.template" "$DEST"
 	chmod 0600 "$DEST"
 	exit 0
 fi
 
-echo "seed-ap-config: no seed source found; $DEST not created" > /dev/console
+echo "seed-ap-config: no seed source found; $DEST not created" > "$CONSOLE"
 exit 0

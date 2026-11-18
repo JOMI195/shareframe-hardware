@@ -5,7 +5,9 @@ set -e
 G=/sys/kernel/config/usb_gadget/shareframe
 [ -d "$G" ] && exit 0
 
-serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
+serial="$(board_serial)"
 [ -n "$serial" ] || serial=1
 mac="$(printf '00000000%s' "$serial" | tail -c 8 | sed 's/../&:/g; s/:$//')"
 

@@ -9,7 +9,9 @@ while [ ! -e /sys/class/net/usb0 ] && [ "$i" -lt 30 ]; do
 	i=$((i + 1))
 done
 
-serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
+serial="$(board_serial)"
 suffix="$(printf '0000%s' "$serial" | tail -c 4)"
 o3=$((0x${suffix%??}))
 o4=$((0x${suffix#??}))
