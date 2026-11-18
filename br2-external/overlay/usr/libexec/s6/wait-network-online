@@ -2,18 +2,20 @@
 # Gate: block until the internet is reachable so heartbeat only starts when it
 # can POST. Bounded: after TIMEOUT start anyway (it self-skips while offline).
 TARGET=1.1.1.1
-TIMEOUT=120
+TIMEOUT="${TIMEOUT:-120}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+CONSOLE="${CONSOLE:-/dev/console}"
 
 i=0
 while ! ping -c1 -W1 "$TARGET" >/dev/null 2>&1; do
     # In AP mode there's no upstream: start the app chain now (served over the AP).
-    if [ "$(cat /run/shareframe/wifi-mode 2>/dev/null)" = ap ]; then
-        echo "wait-network-online: board in AP mode; starting app chain now" > /dev/console
+    if [ "$(cat "$RUN_DIR/wifi-mode" 2>/dev/null)" = ap ]; then
+        echo "wait-network-online: board in AP mode; starting app chain now" > "$CONSOLE"
         exit 0
     fi
     i=$((i + 1))
     if [ "$i" -ge "$TIMEOUT" ]; then
-        echo "wait-network-online: $TARGET unreachable after ${TIMEOUT}s; starting anyway" > /dev/console
+        echo "wait-network-online: $TARGET unreachable after ${TIMEOUT}s; starting anyway" > "$CONSOLE"
         exit 0
     fi
     sleep 1

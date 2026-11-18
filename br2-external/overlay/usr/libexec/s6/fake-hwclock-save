@@ -1,8 +1,9 @@
 #!/bin/sh
 # Persist current epoch hourly and on stop so a boot starts from a sane clock.
+CLOCK_FILE="${CLOCK_FILE:-/data/fake-hwclock}"
 save() {
-	date +%s > /data/fake-hwclock.tmp 2>/dev/null && \
-		mv /data/fake-hwclock.tmp /data/fake-hwclock
+	date +%s > "$CLOCK_FILE.tmp" 2>/dev/null && \
+		mv "$CLOCK_FILE.tmp" "$CLOCK_FILE"
 }
 trap 'kill "$sleeper" 2>/dev/null; save; exit 0' TERM
 while true; do

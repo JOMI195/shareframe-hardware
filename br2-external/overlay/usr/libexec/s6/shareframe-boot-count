@@ -2,7 +2,7 @@
 # Increment a persistent power-cycle counter once per boot; surfaced to the
 # dashboard as a true device power-cycle count.
 set -e
-F=/data/shareframe/boot_count
+F="${DATA_DIR:-/data/shareframe}/boot_count"
 n=$(cat "$F" 2>/dev/null || echo 0)
 case "$n" in
 	''|*[!0-9]*) n=0 ;;

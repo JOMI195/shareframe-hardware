@@ -2,9 +2,10 @@
 # Board = 10.55.0.1; partner gets 10.55.0.2 from udhcpd-usb0. The 169.254 alias
 # reaches hosts that never run a DHCP client and only self-assign link-local.
 set -e
+SYSFS="${SYSFS:-/sys}"
 
 i=0
-while [ ! -e /sys/class/net/usb0 ] && [ "$i" -lt 30 ]; do
+while [ ! -e "$SYSFS/class/net/usb0" ] && [ "$i" -lt 30 ]; do
 	sleep 1
 	i=$((i + 1))
 done

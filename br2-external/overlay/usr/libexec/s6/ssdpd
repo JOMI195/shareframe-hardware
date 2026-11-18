@@ -2,15 +2,18 @@
 # SSDP announce for router portals and Windows network view. Serve our own
 # Basic:1 description.xml (routers ignore ssdpd's hardcoded gateway type).
 set -e
+DATA="${DATA:-/data}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+PROC="${PROC:-/proc}"
 
-mkdir -p /data/ssdpd /run/shareframe/ssdp
+mkdir -p "$DATA/ssdpd" "$RUN_DIR/ssdp"
 
 # UUID cache on /data so the device isn't duplicated in router UIs each boot.
-CACHE=/data/ssdpd/ssdpd.cache
-[ -s "$CACHE" ] || echo "uuid:$(cat /proc/sys/kernel/random/uuid)" > "$CACHE"
+CACHE="$DATA/ssdpd/ssdpd.cache"
+[ -s "$CACHE" ] || echo "uuid:$(cat "$PROC/sys/kernel/random/uuid")" > "$CACHE"
 
 # Relative presentationURL: resolves to the dashboard whatever IP served it.
-cat > /run/shareframe/ssdp/description.xml <<XML
+cat > "$RUN_DIR/ssdp/description.xml" <<XML
 <?xml version="1.0"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
  <specVersion>

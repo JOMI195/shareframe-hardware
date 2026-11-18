@@ -4,12 +4,14 @@
 # A power cut without internet still leaves the clock behind by the outage until NTP;
 # an offline mode needs a real time source (RTC).
 set -e
+CLOCK_FILE="${CLOCK_FILE:-/data/fake-hwclock}"
+CLOCK_DEFAULT="${CLOCK_DEFAULT:-/etc/fake-hwclock-default}"
 
 stamp=
-if [ -r /data/fake-hwclock ]; then
-	stamp=$(cat /data/fake-hwclock)
-elif [ -r /etc/fake-hwclock-default ]; then
-	stamp=$(cat /etc/fake-hwclock-default)
+if [ -r "$CLOCK_FILE" ]; then
+	stamp=$(cat "$CLOCK_FILE")
+elif [ -r "$CLOCK_DEFAULT" ]; then
+	stamp=$(cat "$CLOCK_DEFAULT")
 fi
 
 case "$stamp" in

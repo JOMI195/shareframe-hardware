@@ -2,14 +2,18 @@
 # Boot record. umount-data leaves clean-shutdown behind on an orderly stop; its
 # absence means power loss, watchdog or panic. The first boot has no marker yet.
 set -u
-D=/data/shareframe
+D="${DATA_DIR:-/data/shareframe}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+P="${PSTORE:-/sys/fs/pstore}"
+PROC="${PROC:-/proc}"
+RELEASE="${RELEASE:-/etc/shareframe-release}"
 boots=$(cat "$D/boot_count" 2>/dev/null || echo 0)
 
 if [ -f "$D/clean-shutdown" ] || [ "$boots" -le 1 ]; then
 	unclean=0
 else
 	unclean=1
-	mkdir -p /run/shareframe && : > /run/shareframe/unclean-boot
+	mkdir -p "$RUN_DIR" && : > "$RUN_DIR/unclean-boot"
 	n=$(cat "$D/unclean_resets" 2>/dev/null || echo 0)
 	case "$n" in ''|*[!0-9]*) n=0 ;; esac
 	echo "$((n + 1))" > "$D/unclean_resets.tmp" && mv "$D/unclean_resets.tmp" "$D/unclean_resets"
@@ -17,9 +21,8 @@ fi
 rm -f "$D/clean-shutdown"
 
 # pstore keeps the last boot's console, panic and pmsg across a warm reset only.
-P=/sys/fs/pstore
 pstore=
-grep -q " $P pstore " /proc/mounts || mount -t pstore pstore "$P" 2>/dev/null
+grep -q " $P pstore " "$PROC/mounts" || mount -t pstore pstore "$P" 2>/dev/null
 if [ "$unclean" = 1 ]; then
 	rm -rf "$D/last-reset" && mkdir -p "$D/last-reset"
 	n=0
@@ -31,7 +34,7 @@ if [ "$unclean" = 1 ]; then
 fi
 rm -f "$P"/* 2>/dev/null
 
-version=$(sed -n 's/^VERSION=//p' /etc/shareframe-release 2>/dev/null)
+version=$(sed -n 's/^VERSION=//p' "$RELEASE" 2>/dev/null)
 slot=$(shareframe-slot booted)
 shareframe-event boot "version=${version:-?} slot=${slot:-?} boot_count=$boots unclean=$unclean$pstore"
 exit 0

@@ -3,7 +3,7 @@
 # reporting surface (log, LED, dashboard). earlyoom sets EARLYOOM_PID/NAME/UID.
 set -u
 
-STATE_DIR=/run/shareframe
+STATE_DIR="${STATE_DIR:-/run/shareframe}"
 
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 
