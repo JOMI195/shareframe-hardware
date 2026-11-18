@@ -1,0 +1,6 @@
+network id / ssid / bssid / flags
+0	home	any	
+1	Caf\xc3\xa9 Wi-Fi	any	
+2	my net	any	
+3	5	any	
+4	quote\"d	any	
