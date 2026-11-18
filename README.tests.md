@@ -8,6 +8,9 @@ there); the system tier here runs both repos together.
 ./test.sh lint          # shellcheck: image scripts as busybox ash, tooling as bash
 ./test.sh unit          # lint + one .bats per script, seconds
 ./test.sh contract      # formats shared with shareframe-board, both directions
+./test.sh build         # release + provisioning tools, s6-rc graph, kernel patches
+./test.sh all           # lint + unit + contract + build, about a minute
+./test.sh everything    # all, then shareframe-board's ./test.sh all, then system
 ./test.sh shell         # a shell in the test container, repo at /src (read-only)
 ./test.sh system        # real image under QEMU (see "System tier"), slow
 ```
@@ -73,6 +76,22 @@ apps write. The producer owns the golden, the consumer reads it from the other c
 `./test.sh contract` runs both and needs `../shareframe-board` (or `SHAREFRAME_BOARD_DIR`).
 A deliberate format change: `./test.sh contract --update-golden`, then the board side, both
 repos in one go.
+
+## Build tier
+
+`tests/build/`, run against fixtures made in each test's temp dir:
+
+- `make-release.bats`: a bundle from a tiny squashfs and boot.tar, signed with a CA and
+  key generated per test (openssl, never committed), verified with `rauc info --keyring`;
+  the release JSON against the bundle; the version and prod-key guards.
+- `provision-device.bats`: a six-partition card with the genimage layout in small;
+  factory files land in p5 of a copy and nothing before it changes.
+- `s6-rc.bats`: `s6-rc-compile` (built in the test image, s6-rc 0.5.5.0 like Buildroot)
+  over `shareframe-init/source`; every referenced service exists, every service is started
+  by the default bundle or a dependency of it, the orderings the design relies on hold,
+  and every script an `up`/`run`/`finish` calls exists and can run.
+- `kernel-patches.bats`: the patches are applied in Buildroot's kernel tree. Without
+  `build/buildroot` it skips; `./test.sh build --strict` fails instead.
 
 ## System tier
 

@@ -22,7 +22,7 @@ sf_setup() {
 # Build and release tooling runs on the developer's host: GNU userland, no busybox.
 host_setup() {
 	sf_setup
-	export PATH="$STUBS:/usr/bin:/bin"
+	export PATH="$STUBS:/usr/bin:/bin:/usr/sbin:/sbin"
 }
 
 # stub <name> [body]: a command on PATH that records "<name> <args>" in $CALLS, then runs body.

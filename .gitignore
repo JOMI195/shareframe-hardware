@@ -1,6 +1,7 @@
 # Build output + caches (buildroot/toolchain checkouts, downloaded tarballs)
 artifacts/
 build/
+!tests/build/
 br2-external/fragments/kernel-localversion.fragment
 
 # Kernel module build artifacts

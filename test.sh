@@ -16,6 +16,9 @@ Usage: ./test.sh <command> [--keep] [extra args]
   contract      formats shared with shareframe-board: goldens this repo produces, and the
                 board's goldens fed to these scripts (needs ../shareframe-board)
   contract --update-golden   rewrite this repo's goldens from what the scripts produce now
+  build         release and provisioning tools, the s6-rc graph, kernel patches (--strict: no skips)
+  all           lint, unit, contract, build
+  everything    all, then ../shareframe-board/test.sh all, then system; a summary at the end
   shell         a shell in the test container, repo at /src (read-only)
   system        real image under QEMU: up → tests/system/specs → down
   system <cmd>  any tests/system/sim.sh command (build, up, down, check, wifi ..., see sim.sh help)
@@ -86,6 +89,38 @@ run_contract() {
         bats -r --filter-tags contract --report-formatter junit --output /reports "${rest[@]}" tests/unit tests/contract
 }
 
+run_build() {
+    local strict=() rest=()
+    for a in "${args[@]}"; do
+        if [[ "$a" == --strict ]]; then strict=(-e STRICT=1); else rest+=("$a"); fi
+    done
+    rm -rf "$REPORTS/build" && mkdir -p "$REPORTS/build"
+    in_container -v "$REPORTS/build:/reports" "${strict[@]}" -- \
+        bats -r --report-formatter junit --output /reports "${rest[@]}" tests/build
+}
+
+# Every stage runs even after a failure; the exit code says whether any failed.
+run_everything() {
+    local stage status=0 results=()
+    args=()
+    for stage in "lint" "unit" "contract" "build" "board" "system"; do
+        local rc=0
+        case "$stage" in
+            lint) run_lint || rc=$? ;;
+            unit) run_unit || rc=$? ;;
+            contract) run_contract || rc=$? ;;
+            build) run_build || rc=$? ;;
+            board) "$BOARD/test.sh" all || rc=$? ;;
+            system) run_system || rc=$? ;;
+        esac
+        results+=("$(printf '%-9s %s' "$stage" "$([[ $rc == 0 ]] && echo ok || echo "FAILED ($rc)")")")
+        (( rc == 0 )) || status=1
+    done
+    printf '\n== everything\n'
+    printf '%s\n' "${results[@]}"
+    return $status
+}
+
 run_system() {
     local status=0 started=0
     if ! "$SIM" status 2>/dev/null | grep -q '^== board'; then
@@ -105,6 +140,9 @@ case "$cmd" in
     lint) run_lint ;;
     unit) run_lint && run_unit ;;
     contract) run_contract ;;
+    build) run_build ;;
+    all) run_lint && run_unit && run_contract && run_build ;;
+    everything) run_everything ;;
     shell) in_container -- bash ;;
     system)
         if [[ ${#args[@]} -gt 0 && "${args[0]}" != -* ]]; then
