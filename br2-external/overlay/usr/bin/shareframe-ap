@@ -66,6 +66,11 @@ ap_setpass() {
 		echo "setpass: password must be 8-63 bytes" >&2
 		exit 1
 	fi
+	# hostapd.conf is line-based: a control character would end the passphrase line.
+	case "$pass" in *[[:cntrl:]]*)
+		echo "setpass: password must be printable" >&2
+		exit 1 ;;
+	esac
 
 	AP_SSID=shareframe-board
 	# shellcheck source=/dev/null

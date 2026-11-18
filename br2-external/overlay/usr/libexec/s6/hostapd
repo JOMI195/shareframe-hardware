@@ -4,11 +4,12 @@
 # file) so it never grabs wlan0 before the station services stop. Renders its
 # conf from the per-device credentials, then execs hostapd.
 set -u
-AP_CONF=/data/wifi/ap.conf
-RUN_CONF=/run/shareframe/hostapd.conf
-FLAG=/run/shareframe/ap-enabled
+AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+RUN_CONF="$RUN_DIR/hostapd.conf"
+FLAG="$RUN_DIR/ap-enabled"
 
-mkdir -p /run/shareframe
+mkdir -p "$RUN_DIR"
 while [ ! -e "$FLAG" ]; do sleep 1; done
 
 AP_SSID=shareframe-board
