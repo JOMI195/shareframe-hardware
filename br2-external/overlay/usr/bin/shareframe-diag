@@ -6,40 +6,46 @@ LINES="${LINES:-300}"
 # About a day of the chattier logs; the server takes up to 256 KB compressed.
 LOG_LINES="${LOG_LINES:-1000}"
 SYSLOG_LINES="${SYSLOG_LINES:-2000}"
+ETC="${ETC:-/etc}"
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+SVC="${SVC:-/run/service}"
+LOG_DIR="${LOG_DIR:-/var/log}"
 
 [ "${1:-}" = "--out" ] && { exec > "${2:?--out needs a file}"; }
 
 section() { printf '\n===== %s =====\n' "$1"; }
 
 collect() {
-	section release;        cat /etc/shareframe-release /etc/build-info
+	section release;        cat "$ETC/shareframe-release" "$ETC/build-info"
 	section sysinfo;        shareframe-sysinfo | grep -v '^wifi_ssid='
 	section uptime;         uptime; free; df -h
 	section services
-	for s in /run/service/*; do printf '%s: %s\n' "${s##*/}" "$(s6-svstat "$s" 2>&1)"; done
-	section health.json;    cat /run/shareframe/health.json
-	section events;         tail -n "$LINES" /data/shareframe/health.log
-	section update-history; tail -n 20 /data/shareframe/update-history.jsonl
+	for s in "$SVC"/*; do printf '%s: %s\n' "${s##*/}" "$(s6-svstat "$s" 2>&1)"; done
+	section health.json;    cat "$RUN_DIR/health.json"
+	section events;         tail -n "$LINES" "$DATA_DIR/health.log"
+	section update-history; tail -n 20 "$DATA_DIR/update-history.jsonl"
 	section rauc;           rauc status
 	section last-reset
-	for f in /data/shareframe/last-reset/*; do
+	for f in "$DATA_DIR"/last-reset/*; do
 		[ -f "$f" ] || continue
 		printf -- '--- %s\n' "${f##*/}"; tail -n "$LINES" "$f"
 	done
 	section dmesg;          dmesg | tail -n "$LINES"
 	# Reads the rotated file too and drops dhcpcd's repeating complaint about a router option.
 	section syslog
-	cat /var/log/messages.0 /var/log/messages 2>/dev/null \
+	cat "$LOG_DIR/messages.0" "$LOG_DIR/messages" 2>/dev/null \
 		| grep -v 'malformed embedded option' | tail -n "$SYSLOG_LINES"
-	for f in /var/log/shareframe/*.log; do
+	for f in "$LOG_DIR"/shareframe/*.log; do
 		[ -f "$f" ] || continue
 		section "${f##*/}"; tail -n "$LOG_LINES" "$f"
 	done
 }
 
+# A credential keeps its name and loses everything after its separator.
 collect 2>&1 | awk '{
-	l = tolower($0)
-	if (l ~ /(psk|passw|passphrase|secret|token|private|authorization)[a-z_]*["]?[ ]*[=:]/) sub(/[=:].*/, "=***")
+	if (match(tolower($0), /(psk|passw|passphrase|secret|token|private|authorization)[a-z_]*["]?[ ]*[=:]/))
+		$0 = substr($0, 1, RSTART + RLENGTH - 1) "***"
 	gsub(/eyJ[A-Za-z0-9_.-]+/, "***")
 	print
 }' | gzip -c
