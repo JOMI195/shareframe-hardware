@@ -86,6 +86,8 @@ configs/per-device/*
 configs/fleet/*
 !configs/fleet/example/
 !configs/fleet/example/**
+!configs/sim/
+!configs/sim/**
 
 # Per-release hooks (privat). Nur das Beispiel + README sind getrackt; jede
 # echte releases/<X.Y.Z>/ bleibt ungetrackt.
