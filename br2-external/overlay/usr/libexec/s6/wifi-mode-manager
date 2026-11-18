@@ -4,6 +4,8 @@
 # can enter wifi from the dashboard. The two modes are mutually exclusive (the
 # chip can't do both). Publishes the current mode for the dashboard backend.
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 
 # Paths and timings (overridable for host tests)
 IFACE=wlan0
@@ -43,6 +45,7 @@ set_led() { shareframe-led "$1" 2>/dev/null || true; }
 ap_creds() {
 	AP_SSID=shareframe-board
 	AP_PASS=
+	# shellcheck source=/dev/null
 	[ -f "$AP_CONF" ] && . "$AP_CONF"
 }
 
@@ -74,7 +77,7 @@ write_mode() {
 	known="$(known_ssids)"
 	ap_creds
 	cat > "$JSON_FILE.tmp" <<EOF
-{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$AP_SSID","ap_password":"$AP_PASS","last_failed_at":$LAST_FAILED_AT}
+{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$(json_escape "$AP_SSID")","ap_password":"$(json_escape "$AP_PASS")","last_failed_at":$LAST_FAILED_AT}
 EOF
 	mv -f "$JSON_FILE.tmp" "$JSON_FILE"
 }
