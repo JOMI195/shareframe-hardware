@@ -42,6 +42,11 @@ depends_on() { deps "$1" | grep -qx "$2" || fail "$1 does not depend on $2"; }
 		depends_on "$app" shareframe-db-migrate
 	done
 	depends_on shareframe-db-migrate seed-shareframe-secrets
+	# A trial boot gets its backup back before anything reads /data, then the seeds fill only real gaps.
+	depends_on update-verify system-migrations
+	for after in seed-shareframe-secrets seed-wifi-config seed-ap-config shareframe-db-migrate; do
+		depends_on "$after" update-verify
+	done
 	depends_on shareframe-data-dirs mount-data
 	depends_on boot-event shareframe-boot-count
 	depends_on rauc-mark-good rauc-reconcile

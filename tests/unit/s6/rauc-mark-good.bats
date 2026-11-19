@@ -7,7 +7,7 @@ setup() {
 	GATE="$S6/rauc-mark-good"
 	for cmd in rauc shareframe-update-history shareframe-event reboot; do stub "$cmd"; done
 	quiet_stub s6-svstat 'echo true'
-	quiet_stub shareframe-update-verify 'exit 0'
+	stub shareframe-update-verify "exit \"\$(cat '$T/verify-rc' 2>/dev/null || echo 0)\""
 	quiet_stub curl "exit \"\$(cat '$T/curl-rc')\""
 	# The gate's polling interval shrinks to a moment.
 	quiet_stub sleep 'exec /usr/bin/sleep 0.05'
@@ -89,4 +89,13 @@ verdict() {
 	"$GATE" >/dev/null 2>&1
 	sleep 0.5
 	assert_file_not_exists "$CALLS"
+}
+
+@test "the gate checks what the boot restored, and an identity still gone keeps it from committing" {
+	trial ok true yes
+	echo 1 > "$T/verify-rc"
+	"$GATE" >/dev/null 2>&1
+	assert_equal "$(verdict)" reboot
+	assert_called 'shareframe-update-verify check'
+	refute_called 'shareframe-update-verify restore'
 }

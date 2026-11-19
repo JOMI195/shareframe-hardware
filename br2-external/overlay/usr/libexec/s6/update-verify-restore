@@ -1,0 +1,6 @@
+#!/bin/sh
+# Trial boot of an update: put back what the new release's migrations lost, before the seeds
+# and the apps read /data. Never fails the boot; rauc-mark-good's check decides the commit.
+shareframe-slot trial || exit 0
+shareframe-update-verify restore || echo "update-verify: required state could not be restored" > "${CONSOLE:-/dev/console}"
+exit 0

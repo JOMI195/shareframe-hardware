@@ -1,5 +1,6 @@
-# Per-device /data across an update: backed up by the old system, restored in the new one's
-# commit gate. Missing identity or database blocks the commit.
+# Per-device /data across an update: backed up by the old system, restored by the new one at
+# boot right after its migrations, checked in its commit gate. Missing identity or database
+# blocks the commit.
 load ../../support/common
 
 setup() {
@@ -56,4 +57,24 @@ last() { jq -r ".$1" "$T/data/shareframe/update-verify/last.json"; }
 	: > "$T/data/shareframe/.env.secrets.toml"
 	shareframe-update-verify restore
 	assert_equal "$(last secrets)" restored
+}
+
+@test "check passes with the identity and the database there, and keeps the boot's record" {
+	shareframe-update-verify backup
+	rm "$T/data/shareframe/.env.secrets.toml"
+	shareframe-update-verify restore
+	run shareframe-update-verify check
+	assert_success
+	assert_equal "$(last secrets)" restored
+}
+
+@test "check fails without the identity or the database, and writes nothing" {
+	rm "$T/data/shareframe/.env.secrets.toml"
+	run shareframe-update-verify check
+	assert_failure 1
+	assert_file_not_exists "$T/data/shareframe/update-verify/last.json"
+	echo 'ed25519_private_key = "seed"' > "$T/data/shareframe/.env.secrets.toml"
+	rm -rf "$T/data/shareframe/db"
+	run shareframe-update-verify check
+	assert_failure 1
 }
