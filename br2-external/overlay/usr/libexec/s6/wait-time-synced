@@ -4,13 +4,14 @@
 # validation. Only network/TLS services gate on this. Bounded: continue after
 # TIMEOUT (their retry loops cover a still-bad clock).
 THRESHOLD=1700000000   # ~2023-11-14
-TIMEOUT=30
+TIMEOUT="${TIMEOUT:-30}"
+CONSOLE="${CONSOLE:-/dev/console}"
 
 i=0
 while [ "$(date +%s)" -lt "$THRESHOLD" ]; do
     i=$((i + 1))
     if [ "$i" -ge "$TIMEOUT" ]; then
-        echo "wait-time-synced: clock still pre-${THRESHOLD} after ${TIMEOUT}s; continuing" > /dev/console
+        echo "wait-time-synced: clock still pre-${THRESHOLD} after ${TIMEOUT}s; continuing" > "$CONSOLE"
         exit 0
     fi
     sleep 1

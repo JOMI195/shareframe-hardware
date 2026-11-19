@@ -7,7 +7,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HOST_BIN="${ROOT}/build/buildroot/output/host/bin"
+HOST_BIN="${SHAREFRAME_BR_DIR:-${ROOT}/build/buildroot}/output/host/bin"
 
 MCOPY="${HOST_BIN}/mcopy"
 [ -x "${MCOPY}" ] || MCOPY="$(command -v mcopy || true)"

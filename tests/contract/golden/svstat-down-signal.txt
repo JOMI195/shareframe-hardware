@@ -1,0 +1,1 @@
+down (signal SIGTERM) 56 seconds, normally up, ready 56 seconds

@@ -1,0 +1,15 @@
+bssid=02:00:00:00:01:00
+freq=2412
+ssid=my net
+id=1
+mode=station
+pairwise_cipher=CCMP
+group_cipher=CCMP
+key_mgmt=WPA2-PSK
+wpa_state=COMPLETED
+ip_address=10.0.2.15
+address=02:00:00:00:00:00
+---
+3: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global wlan0
+       valid_lft 86321sec preferred_lft 86321sec

@@ -2,9 +2,9 @@
 # Admin CLI for the factory store (p5): the durable per-device defaults that a
 # factory reset restores. set = update the store, not the live /data state.
 set -e
-DEV=/dev/mmcblk0p5
-STAGED=/run/shareframe/factory
-MNT=/run/shareframe/factory-rw
+DEV="${FACTORY_DEV:-/dev/mmcblk0p5}"
+STAGED="${FACTORY_DIR:-/run/shareframe/factory}"
+MNT="${FACTORY_MNT:-/run/shareframe/factory-rw}"
 
 usage() { echo "usage: shareframe-factory list | get <name> | set <name> <file>" >&2; exit 2; }
 [ "$(id -u)" = 0 ] || { echo "shareframe-factory: must run as root" >&2; exit 1; }

@@ -2,10 +2,13 @@
 # USB gadget (usb0) via configfs. CDC-NCM: inbox drivers on Linux, macOS, Win11.
 set -e
 
-G=/sys/kernel/config/usb_gadget/shareframe
+SYSFS="${SYSFS:-/sys}"
+G="$SYSFS/kernel/config/usb_gadget/shareframe"
 [ -d "$G" ] && exit 0
 
-serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo 2>/dev/null | head -1)"
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
+serial="$(board_serial)"
 [ -n "$serial" ] || serial=1
 mac="$(printf '00000000%s' "$serial" | tail -c 8 | sed 's/../&:/g; s/:$//')"
 
@@ -26,4 +29,4 @@ echo "CDC NCM" > "$G/configs/c.1/strings/0x409/configuration"
 echo 250       > "$G/configs/c.1/MaxPower"
 ln -s "$G/functions/ncm.usb0" "$G/configs/c.1/ncm.usb0"
 
-ls /sys/class/udc | head -1 > "$G/UDC"
+ls "$SYSFS/class/udc" | head -1 > "$G/UDC"

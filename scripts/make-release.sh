@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HOST_BIN="${ROOT}/build/buildroot/output/host/bin"
+HOST_BIN="${SHAREFRAME_BR_DIR:-${ROOT}/build/buildroot}/output/host/bin"
 DEV_KEYS="${ROOT}/br2-external/package/shareframe-rauc/files"
 
 # criticality must match the server's choices: Critical|Important|Minor|Patch

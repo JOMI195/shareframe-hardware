@@ -30,8 +30,8 @@ booted=$(shareframe-slot booted)
 		if grep -q '"internet":true' "$WIFI_JSON" 2>/dev/null; then
 			[ -f "$BACKEND_OK" ] || ok=0
 		fi
-		# restore per-device /data files; an unrestorable required one keeps the gate shut
-		[ "$ok" = 1 ] && { shareframe-update-verify restore >/dev/null 2>&1 || ok=0; }
+		# the boot restored per-device /data files; a required one still gone keeps the gate shut
+		[ "$ok" = 1 ] && { shareframe-update-verify check >/dev/null 2>&1 || ok=0; }
 		if [ "$ok" = 1 ]; then
 			if rauc status mark-good >/dev/null 2>&1; then
 				echo "rauc-mark-good: slot $booted committed"

@@ -39,6 +39,7 @@ boot-event
 boot-guard
 seed-shareframe-secrets
 system-migrations
+update-verify
 shareframe-db-migrate
 wait-time-synced
 shareframe-display

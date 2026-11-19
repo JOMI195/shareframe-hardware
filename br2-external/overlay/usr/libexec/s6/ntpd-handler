@@ -1,13 +1,15 @@
 #!/bin/sh
 
-STATE=/run/ntp.synced
+STATE="${STATE:-/run/ntp.synced}"
+CLOCK_FILE="${CLOCK_FILE:-/data/fake-hwclock}"
+CONSOLE="${CONSOLE:-/dev/console}"
 
 case "$1" in
     step)
         touch "$STATE"
         # fake-hwclock-save only saves hourly; a short-lived boot would keep restoring the stale time.
-        date +%s > /data/fake-hwclock.ntp 2>/dev/null && mv /data/fake-hwclock.ntp /data/fake-hwclock
-        echo "ntpd: synced" > /dev/console
+        date +%s > "$CLOCK_FILE.ntp" 2>/dev/null && mv "$CLOCK_FILE.ntp" "$CLOCK_FILE" && sync
+        echo "ntpd: synced" > "$CONSOLE"
         ;;
     stratum|periodic)
         touch "$STATE"

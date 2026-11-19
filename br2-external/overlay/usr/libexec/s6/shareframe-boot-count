@@ -2,10 +2,12 @@
 # Increment a persistent power-cycle counter once per boot; surfaced to the
 # dashboard as a true device power-cycle count.
 set -e
-F=/data/shareframe/boot_count
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
+F="${DATA_DIR:-/data/shareframe}/boot_count"
 n=$(cat "$F" 2>/dev/null || echo 0)
 case "$n" in
 	''|*[!0-9]*) n=0 ;;
 esac
 n=$((n + 1))
-echo "$n" > "$F.tmp" && mv "$F.tmp" "$F"
+write_durable "$F" "$n"

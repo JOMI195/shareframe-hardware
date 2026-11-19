@@ -5,8 +5,11 @@
 # state (device identity, db). The rootfs slot is verity+signature protected, so
 # nothing there needs a runtime "still there?" check.
 #   backup  (old system, before slot write): copy protected paths to the store
-#   restore (new system, in the commit gate): restore any missing one; exit 1 if
-#           a REQUIRED path is gone and cannot be restored (blocks mark-good)
+#   restore (new system, trial boot, right after its migrations and before the seeds and
+#           apps read /data): restore any missing one; exit 1 if a REQUIRED path is gone
+#           and cannot be restored
+#   check   (new system, in the commit gate): exit 1 if a REQUIRED path is gone (blocks
+#           mark-good); writes nothing
 # Paths/store are overridable via env (VERIFY_ROOT prefix) for host testing.
 set -u
 
@@ -94,5 +97,6 @@ do_restore() {
 case "${1:-}" in
 	backup)  do_backup ;;
 	restore) do_restore ;;
-	*) echo "usage: shareframe-update-verify backup|restore" >&2; exit 2 ;;
+	check)   file_present "$SECRETS" && dir_present "$DB_DIR" ;;
+	*) echo "usage: shareframe-update-verify backup|restore|check" >&2; exit 2 ;;
 esac

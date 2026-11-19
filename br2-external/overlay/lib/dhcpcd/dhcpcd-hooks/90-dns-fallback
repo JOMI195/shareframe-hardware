@@ -2,6 +2,8 @@
 # If DHCP / RA supplied no nameserver, install public fallbacks so name
 # resolution still works on misconfigured / partial networks.
 
+RESOLV_CONF="${RESOLV_CONF:-/etc/resolv.conf}"
+
 dns_fallback_install() {
 	case "$reason" in
 		BOUND|REBIND|RENEW|BOUND6|REBIND6|RENEW6) ;;
@@ -9,7 +11,7 @@ dns_fallback_install() {
 	esac
 
 	# If anything wrote a nameserver line, trust it (DHCP or earlier hook).
-	if grep -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
+	if grep -q '^nameserver' "$RESOLV_CONF" 2>/dev/null; then
 		return 0
 	fi
 
@@ -17,7 +19,7 @@ dns_fallback_install() {
 	{
 		printf 'nameserver 1.1.1.1\n'
 		printf 'nameserver 8.8.8.8\n'
-	} > /etc/resolv.conf
+	} > "$RESOLV_CONF"
 }
 
 dns_fallback_install

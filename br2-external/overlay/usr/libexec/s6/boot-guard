@@ -6,6 +6,8 @@
 # A trial boot is exempt: tryboot falls back on its own, never loops.
 # A remote safe mode marker (shareframe-safe-mode) keeps it on every non-trial boot.
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
 LIMIT="${LIMIT:-5}"
@@ -16,7 +18,7 @@ CLEARED="$DATA_DIR/safe-mode-cleared"
 shareframe-safe-mode restore
 
 if [ ! -f "$RUN_DIR/unclean-boot" ]; then
-	echo 0 > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
+	write_durable "$COUNT" 0
 	rm -f "$CLEARED"
 	exit 0
 fi
@@ -24,7 +26,7 @@ fi
 n=$(cat "$COUNT" 2>/dev/null || echo 0)
 case "$n" in ''|*[!0-9]*) n=0 ;; esac
 n=$((n + 1))
-echo "$n" > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
+write_durable "$COUNT" "$n"
 
 if [ "$n" -ge "$LIMIT" ]; then
 	shareframe-safe-mode trip boot-loop "boot loop: $n boots under ${STABLE}s; display disabled"
@@ -32,7 +34,7 @@ fi
 
 (
 	sleep "$STABLE"
-	echo 0 > "$COUNT.tmp" && mv "$COUNT.tmp" "$COUNT"
+	write_durable "$COUNT" 0
 	rm -f "$CLEARED"
 ) </dev/null >/dev/null 2>&1 &
 exit 0

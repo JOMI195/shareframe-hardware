@@ -23,6 +23,7 @@ esac
 SHORT=200; LONG=800; GAP=300; CYCLE=2000; NORMAL_CYCLE=9800
 NORMAL="0 1"; WIFI_CONNECTING="0 2"; WIFI_DOWN="0 3"; AP_MODE="0 4"; UPDATING="1 0"; PROTECTED="2 0"
 for conf in /etc/shareframe/led.conf /data/shareframe/led.conf; do
+    # shellcheck source=/dev/null
     [ -r "$conf" ] && . "$conf" || true
 done
 

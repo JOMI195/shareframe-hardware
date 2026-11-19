@@ -16,6 +16,8 @@
 # - A committed update lifts a remote safe mode (rauc-mark-good).
 # - An automatic trip has the panel blanked, a boot loop only once per streak.
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
 SERVICE="${SERVICE:-/run/service/shareframe-display}"
@@ -53,7 +55,7 @@ exit)
 	mkdir -p "$DATA_DIR"
 	rm -f "$MARKER" "$STATE" "$RUN_DIR/safe-mode-clear" "$RUN_DIR/display-crashes" "$CLEARED"
 	# The admin vouched for the board; the next loop has to build up again.
-	echo 0 > "$DATA_DIR/short_boots.tmp" && mv "$DATA_DIR/short_boots.tmp" "$DATA_DIR/short_boots"
+	write_durable "$DATA_DIR/short_boots" 0
 	shareframe-event safe-mode "remote: display enabled"
 	shareframe-led refresh 2>/dev/null || true
 	exec s6-svc -u "$SERVICE"

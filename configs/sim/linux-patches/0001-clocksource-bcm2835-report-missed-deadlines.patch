@@ -1,0 +1,30 @@
+clocksource: bcm2835: report a deadline that passed while programming it
+
+The system timer compare only matches on equality. If more than the
+minimum delta elapses between reading the counter and writing the
+compare, the event fires only after the 32-bit counter wraps, about
+71 minutes later, and every timer on the system stalls with it. Under
+QEMU a vCPU stall during host I/O is enough. Return -ETIME so the
+clockevents core reprograms with a larger delta.
+
+--- a/drivers/clocksource/bcm2835_timer.c
++++ b/drivers/clocksource/bcm2835_timer.c
+@@ -45,9 +45,15 @@
+ {
+ 	struct bcm2835_timer *timer = container_of(evt_dev,
+ 		struct bcm2835_timer, evt);
+-	writel_relaxed(readl_relaxed(system_clock) + event,
+-		timer->compare);
+-	return 0;
++	u32 next = readl_relaxed(system_clock) + event;
++
++	writel_relaxed(next, timer->compare);
++	/*
++	 * The compare only fires on an exact match: a deadline that passed
++	 * while it was written would wait for the 32-bit counter to wrap.
++	 */
++	return event < 0x7fffffff &&
++		(s32)(next - readl_relaxed(system_clock)) <= 0 ? -ETIME : 0;
+ }
+ 
+ static irqreturn_t bcm2835_time_interrupt(int irq, void *dev_id)

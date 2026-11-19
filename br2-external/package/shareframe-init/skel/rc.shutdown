@@ -2,5 +2,8 @@
 # Tell self-healing helpers (wifi-stack-restart) to stand down so they don't
 # re-up wifi services while s6-rc brings the tree down — otherwise the down
 # transition never settles and the board never reaches the final reboot.
-touch /run/shutting-down
+LED_CMD="${LED_CMD:-/usr/bin/shareframe-led}"
+SHUTTING_DOWN="${SHUTTING_DOWN:-/run/shutting-down}"
+"$LED_CMD" off 2>/dev/null || true
+touch "$SHUTTING_DOWN"
 s6-rc -bda change 2>/dev/null

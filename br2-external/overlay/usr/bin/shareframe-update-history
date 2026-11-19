@@ -7,6 +7,7 @@ RESULT="${1:?result required}"
 ERROR="${2:-}"
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 META="${META:-/data/rauc/pending-meta.json}"
+RELEASE="${RELEASE:-/etc/shareframe-release}"
 HIST="$DATA_DIR/update-history.jsonl"
 MAX=50
 
@@ -15,7 +16,7 @@ esc() { printf '%s' "$1" | tr -d '\n\r' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 from=$(json_get from_version)
 to=$(json_get to_version)
-[ -n "$from" ] || from=$(sed -n 's/^VERSION=//p' /etc/shareframe-release 2>/dev/null)
+[ -n "$from" ] || from=$(sed -n 's/^VERSION=//p' "$RELEASE" 2>/dev/null)
 
 mkdir -p "$DATA_DIR"
 printf '{"timestamp":"%s","from_version":"%s","to_version":"%s","result":"%s","error":"%s"}\n' \
@@ -26,5 +27,6 @@ lines=$(wc -l < "$HIST" 2>/dev/null || echo 0)
 if [ "$lines" -gt "$MAX" ]; then
 	tail -n "$MAX" "$HIST" > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
 fi
+sync
 shareframe-event update "$RESULT ${from:-?} -> ${to:-?}${ERROR:+ ($ERROR)}"
 rm -f "$META"

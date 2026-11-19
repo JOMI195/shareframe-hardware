@@ -5,17 +5,19 @@
 # dhcpcd-wlan) MUST already be stopped by the caller (wifi-mode-manager):
 # brcmfmac cannot share wlan0 between AP and station.
 set -u
-IFACE=wlan0
+IFACE="${IFACE:-wlan0}"
 AP_IP=192.168.4.1/24
-SVC=/run/service
-FLAG=/run/shareframe/ap-enabled
-AP_CONF=/data/wifi/ap.conf
+SVC="${SVC:-/run/service}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+FLAG="$RUN_DIR/ap-enabled"
+AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
+CONSOLE="${CONSOLE:-/dev/console}"
 
-log() { echo "shareframe-ap: $*" > /dev/console; }
+log() { echo "shareframe-ap: $*" > "$CONSOLE"; }
 
 ap_up() {
 	log "starting AP on ${IFACE}"
-	mkdir -p /run/shareframe
+	mkdir -p "$RUN_DIR"
 	ip addr flush dev "$IFACE" 2>/dev/null || true
 	ip link set "$IFACE" up 2>/dev/null || true
 	# Release the gated services, then kick them so they don't wait the poll.
@@ -64,9 +66,14 @@ ap_setpass() {
 		echo "setpass: password must be 8-63 bytes" >&2
 		exit 1
 	fi
+	# hostapd.conf is line-based: a control character would end the passphrase line.
+	case "$pass" in *[[:cntrl:]]*)
+		echo "setpass: password must be printable" >&2
+		exit 1 ;;
+	esac
 
 	AP_SSID=shareframe-board
-	AP_PASS=
+	# shellcheck source=/dev/null
 	[ -f "$AP_CONF" ] && . "$AP_CONF"
 
 	# The file is shell-sourced (hostapd run script, wifi-mode-manager):

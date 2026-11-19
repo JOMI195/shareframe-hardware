@@ -1,0 +1,22 @@
+# Scripts of the image without a unit test: <path> <tier that covers it> <why>.
+# tests/unit/inventory.bats fails for a script that has neither a test nor a line here.
+br2-external/overlay/usr/libexec/s6/mount-data            system    fsck, f2fs mount and format of the real card
+br2-external/overlay/usr/libexec/s6/expand-data           system    sfdisk and resize.f2fs on the card's geometry
+br2-external/overlay/usr/libexec/s6/umount-data           system    unmounting /data at shutdown; its marker is read by boot-event
+br2-external/overlay/usr/libexec/s6/stage-factory         system    mounts the factory partition (p5)
+br2-external/overlay/usr/libexec/s6/bind-persistent-state system    bind mounts over /etc/dropbear
+br2-external/overlay/usr/libexec/s6/unbind-persistent-state system    undoes bind-persistent-state
+br2-external/overlay/usr/libexec/s6/shareframe-data-dirs  system    mkdir on the mounted /data
+br2-external/overlay/usr/libexec/s6/shareframe-db-migrate system    execs the board's shareframe-migrate
+br2-external/overlay/usr/libexec/s6/load-brcmfmac         hardware  modprobe and rfkill of the Wi-Fi chip
+br2-external/overlay/usr/libexec/s6/wpa_supplicant        system    execs wpa_supplicant (hwsim in the simulator)
+br2-external/overlay/usr/libexec/s6/dhcpcd-wlan           system    execs dhcpcd on wlan0
+br2-external/overlay/usr/libexec/s6/dnsmasq-ap            system    execs dnsmasq for the hotspot; a phone joins it in network.system.spec
+br2-external/overlay/usr/libexec/s6/udhcpd-usb0           integration  execs udhcpd; its config and setup-usb0 lease to a peer in usb0.bats
+br2-external/overlay/usr/libexec/s6/generate-dropbear-keys system   dropbearkey on first boot
+br2-external/package/shareframe-initramfs/rootfs/init     system    mounts the A/B slot and switch_roots; every simulator boot runs it
+br2-external/package/shareframe-init/skel/rc.init         system    s6-linux-init stage 1
+br2-external/package/shareframe-init/skel/halt            system    s6-linux-init-shutdown wrapper
+br2-external/package/shareframe-init/skel/poweroff        system    s6-linux-init-shutdown wrapper
+br2-external/package/shareframe-init/skel/reboot          system    s6-linux-init-shutdown wrapper
+br2-external/package/shareframe-init/skel/shutdown        system    s6-linux-init-shutdown wrapper

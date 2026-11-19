@@ -1,6 +1,7 @@
 # Build output + caches (buildroot/toolchain checkouts, downloaded tarballs)
 artifacts/
 build/
+!tests/build/
 br2-external/fragments/kernel-localversion.fragment
 
 # Kernel module build artifacts
@@ -86,6 +87,8 @@ configs/per-device/*
 configs/fleet/*
 !configs/fleet/example/
 !configs/fleet/example/**
+!configs/sim/
+!configs/sim/**
 
 # Per-release hooks (privat). Nur das Beispiel + README sind getrackt; jede
 # echte releases/<X.Y.Z>/ bleibt ungetrackt.

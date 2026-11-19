@@ -83,6 +83,16 @@ function prepare_src() {
     fi
 }
 
+# Generated per build; a Buildroot tree outside the repo keeps it, so such builds leave the repo untouched.
+function localversion_fragment() {
+    if [ "$(realpath -m "${SHAREFRAME_BR_DIR:-build/buildroot}")" != "$(realpath -m build/buildroot)" ]; then
+        mkdir -p "$SHAREFRAME_BR_DIR"
+        echo "$(realpath "$SHAREFRAME_BR_DIR")/kernel-localversion.fragment"
+    else
+        echo br2-external/fragments/kernel-localversion.fragment
+    fi
+}
+
 function toolchain() {
     echo "=== Download, verify, extract toolchain ==="
     local src_uri="$TOOLCHAIN_BASE_URL/$TOOLCHAIN_NAME.tar.xz"
@@ -151,8 +161,8 @@ function buildroot() {
     # Config profile (default prod); selects which config overlay the app merges.
     export SHAREFRAME_PROFILE="${SHAREFRAME_PROFILE:-prod}"
     case "${SHAREFRAME_PROFILE}" in
-        dev|prod|prod.local) ;;
-        *) echo "buildroot: invalid SHAREFRAME_PROFILE='${SHAREFRAME_PROFILE}' (use dev, prod, prod.local)" >&2; return 1 ;;
+        dev|prod|prod.local|sim) ;;
+        *) echo "buildroot: invalid SHAREFRAME_PROFILE='${SHAREFRAME_PROFILE}' (use dev, prod, prod.local, sim)" >&2; return 1 ;;
     esac
     echo "=== SHAREFRAME_PROFILE=${SHAREFRAME_PROFILE} ==="
 
@@ -173,7 +183,8 @@ function buildroot() {
     # build. The staging step below reuses these.
     local version="${SHAREFRAME_VERSION:-${OS_SHA:-unknown}}"
     local label="${SHAREFRAME_CONFIG_LABEL:-default}-${version}"
-    local dir="artifacts/builds/$label"
+    local artifacts="${SHAREFRAME_ARTIFACTS_DIR:-artifacts/builds}"
+    local dir="$artifacts/$label"
 
     # Never silently destroy a build that already carries signed bundles; bump the
     # version (versions are unique) or remove the dir on purpose.
@@ -183,7 +194,7 @@ function buildroot() {
     echo "=== Download and extract Buildroot ==="
     local src_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz"
     local sig_uri="$BUILDROOT_BASE_URL/buildroot-$BUILDROOT_VERSION.tar.gz.sign"
-    local src_dir="build/buildroot"
+    local src_dir="${SHAREFRAME_BR_DIR:-build/buildroot}"
 
     prepare_src \
       "$src_uri" \
@@ -196,13 +207,34 @@ function buildroot() {
       BR2_EXTERNAL="$(realpath br2-external)" \
       defconfig
 
+    # The defconfig paths are relative to build/buildroot; a tree elsewhere needs them absolute.
+    if [ "$(realpath -m "$src_dir")" != "$(realpath -m build/buildroot)" ]; then
+        sed -i -e "s|\"\.\./toolchain\"|\"$PWD/build/toolchain\"|" -e "s|\.\./\.\./|$PWD/|g" \
+            -e "s|$PWD/br2-external/fragments/kernel-localversion\.fragment|$(localversion_fragment)|" "$src_dir/.config"
+    fi
+
     # Reset local.mk each build so no override leaks from a previous build.
     : > "$src_dir/local.mk"
     if [ -n "$config_dir" ] && [ -d "$config_dir/overlay" ]; then
         # Last-wins: tracked overlay first, config overlay layered on top.
-        printf 'BR2_ROOTFS_OVERLAY="../../br2-external/overlay %s"\n' \
-            "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
+        printf 'BR2_ROOTFS_OVERLAY="%s %s"\n' \
+            "$PWD/br2-external/overlay" "$(realpath "$config_dir/overlay")" >> "$src_dir/.config"
         echo "=== Second overlay: $(realpath "$config_dir/overlay") ==="
+    fi
+    if [ -n "$config_dir" ] && [ -f "$config_dir/kernel.fragment" ]; then
+        local fragments
+        fragments="$(sed -n 's/^BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="\(.*\)"$/\1/p' "$src_dir/.config" | tail -1)"
+        printf 'BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="%s %s"\n' \
+            "$fragments" "$(realpath "$config_dir/kernel.fragment")" >> "$src_dir/.config"
+        echo "=== Kernel fragment: $(realpath "$config_dir/kernel.fragment") ==="
+    fi
+    if [ -n "$config_dir" ] && [ -d "$config_dir/linux-patches" ]; then
+        printf 'BR2_LINUX_KERNEL_PATCH="%s"\n' "$(realpath "$config_dir/linux-patches")" >> "$src_dir/.config"
+        echo "=== Kernel patches: $(realpath "$config_dir/linux-patches") ==="
+    fi
+    if [ -n "$config_dir" ] && [ -f "$config_dir/buildroot.fragment" ]; then
+        cat "$config_dir/buildroot.fragment" >> "$src_dir/.config"
+        echo "=== Buildroot fragment: $(realpath "$config_dir/buildroot.fragment") ==="
     fi
     # Baked into rootfs /etc/shadow (not /data); every update overwrites it.
     if [ -n "${SHAREFRAME_ROOT_PASSWD:-}" ]; then
@@ -279,27 +311,12 @@ function buildroot() {
 }
 EOF
 
-    ln -sfn "$label" artifacts/builds/latest
+    ln -sfn "$label" "$artifacts/latest"
 
     echo "=== Inspect (${label}) ==="
     file "$(realpath "$dir/qemu/zImage")"
     file "$(realpath "$dir/rootfs.squashfs")"
     [ -f "$dir/sdcard.img" ] && file "$(realpath "$dir/sdcard.img")"
-}
-
-function qemu_rpi0() {
-    # Headless boot to BusyBox login; no hardware. usb0/SSH untestable in QEMU
-    # ("can't find device usb0" is normal). Console on the mini-UART (ttyS1) as on
-    # real hardware; the second -serial puts it on stdio. initcall_blacklist skips
-    # the BCM2835 power/watchdog blocks QEMU doesn't model (else Oops/reboot loop).
-    qemu-system-arm \
-        -M raspi0 \
-        -nographic \
-        -serial null -serial mon:stdio \
-        -kernel artifacts/builds/latest/qemu/zImage \
-        -dtb artifacts/builds/latest/qemu/bcm2835-rpi-zero-w.dtb \
-        -initrd artifacts/builds/latest/qemu/initramfs.cpio.gz \
-        -append "earlycon=uart8250,mmio32,0x20215040 console=ttyS1,115200 root=/dev/ram0 rw initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init"
 }
 
 function clean() {
@@ -417,13 +434,14 @@ function build() {
 
   local sha
   sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  printf 'CONFIG_LOCALVERSION="-%s"\n' "$sha" > br2-external/fragments/kernel-localversion.fragment
+  printf 'CONFIG_LOCALVERSION="-%s"\n' "$sha" > "$(localversion_fragment)"
   export OS_SHA="$sha"
 
   # App identity: the sibling checkout Buildroot rsyncs (SITE_METHOD=local pins
   # nothing), so record which app commit actually went into the image.
   local app_src="${SHAREFRAME_BOARD_OVERRIDE_SRCDIR:-../shareframe-board}"
-  export APP_SHA="$(git -C "$app_src" describe --always --abbrev=7 --dirty --exclude='*' 2>/dev/null || echo unknown)"
+  APP_SHA="$(git -C "$app_src" describe --always --abbrev=7 --dirty --exclude='*' 2>/dev/null || echo unknown)"
+  export APP_SHA
   echo "=== App SHA: ${APP_SHA} (${app_src}) ==="
 
   toolchain

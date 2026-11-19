@@ -7,7 +7,15 @@
 #
 # Intentionally no `set -e`: one unavailable source must not drop the rest.
 
-IFACE=wlan0
+IFACE="${IFACE:-wlan0}"
+PROC="${PROC:-/proc}"
+SYSFS="${SYSFS:-/sys}"
+ETC="${ETC:-/etc}"
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+RUN_DIR="${RUN_DIR:-/run/shareframe}"
+SVC="${SVC:-/run/service}"
+DATA_MNT="${DATA_MNT:-/data}"
+ROOT_MNT="${ROOT_MNT:-/}"
 
 emit() { printf '%s=%s\n' "$1" "$2"; }
 
@@ -19,14 +27,14 @@ emit time_iso "$(date +%Y-%m-%dT%H:%M:%S%z 2>/dev/null)"
 
 # --- OS identity (subshell so os-release vars don't leak into ours) ---
 # shellcheck disable=SC1091  # /etc/os-release is generated at build time
-[ -r /etc/os-release ] && ( . /etc/os-release; emit os_pretty_name "${PRETTY_NAME:-}" )
+[ -r "$ETC/os-release" ] && ( . "$ETC/os-release"; emit os_pretty_name "${PRETTY_NAME:-}" )
 
 # --- release identity (written by post-build.sh): the semver plus the two repo
 # shas it was built from (os = shareframe-hardware, app = shareframe-board) ---
-if [ -r /etc/shareframe-release ]; then
-	emit version "$(sed -n 's/^VERSION=//p' /etc/shareframe-release)"
-	emit os_sha  "$(sed -n 's/^OS_SHA=//p' /etc/shareframe-release)"
-	emit app_sha "$(sed -n 's/^APP_SHA=//p' /etc/shareframe-release)"
+if [ -r "$ETC/shareframe-release" ]; then
+	emit version "$(sed -n 's/^VERSION=//p' "$ETC/shareframe-release")"
+	emit os_sha  "$(sed -n 's/^OS_SHA=//p' "$ETC/shareframe-release")"
+	emit app_sha "$(sed -n 's/^APP_SHA=//p' "$ETC/shareframe-release")"
 fi
 
 # --- booted A/B slot (cmdline) + trial flag (staged, uncommitted tryboot) ---
@@ -37,55 +45,55 @@ if [ -n "$slot" ]; then
 fi
 
 # --- hardware identity ---
-[ -r /proc/device-tree/model ] && emit host_model "$(tr -d '\0' < /proc/device-tree/model)"
-[ -r /proc/cpuinfo ] && emit serial "$(awk '/^Serial/{ print $3; exit }' /proc/cpuinfo)"
+[ -r "$PROC/device-tree/model" ] && emit host_model "$(tr -d '\0' < "$PROC/device-tree/model")"
+[ -r "$PROC/cpuinfo" ] && emit serial "$(awk '/^Serial/{ print $3; exit }' "$PROC/cpuinfo")"
 
 # --- uptime (seconds) ---
-[ -r /proc/uptime ] && emit uptime_seconds "$(awk '{printf "%d", $1}' /proc/uptime)"
+[ -r "$PROC/uptime" ] && emit uptime_seconds "$(awk '{printf "%d", $1}' "$PROC/uptime")"
 
 # --- device power-cycle count (persisted across boots by shareframe-boot-count) ---
-[ -r /data/shareframe/boot_count ] && emit boot_count "$(cat /data/shareframe/boot_count 2>/dev/null)"
+[ -r $DATA_DIR/boot_count ] && emit boot_count "$(cat $DATA_DIR/boot_count 2>/dev/null)"
 
 # --- overall health (published by shareframe-health: ok|warn|critical) ---
-[ -r /run/shareframe/health ] && emit health_state "$(cat /run/shareframe/health 2>/dev/null)"
+[ -r $RUN_DIR/health ] && emit health_state "$(cat $RUN_DIR/health 2>/dev/null)"
 
 # --- per-check health + fault counters (shareframe-health, service-finish, boot-event) ---
-HJSON=/run/shareframe/health.json
+HJSON=$RUN_DIR/health.json
 for c in oom temp disk; do
 	s=$(sed -n "s/.*\"$c\":\"\([a-z]*\)\".*/\1/p" "$HJSON" 2>/dev/null)
 	[ -n "$s" ] && emit "health_$c" "$s"
 done
 count() { v=$(cat "$1" 2>/dev/null); case "$v" in ''|*[!0-9]*) v=0 ;; esac; echo "$v"; }
-emit crash_count    "$(count /data/shareframe/crash_count)"
-emit unclean_resets "$(count /data/shareframe/unclean_resets)"
-emit oom_kills      "$(count /run/shareframe/oom-kills)"
-emit uv_events      "$(count /run/shareframe/uv_events)"
+emit crash_count    "$(count $DATA_DIR/crash_count)"
+emit unclean_resets "$(count $DATA_DIR/unclean_resets)"
+emit oom_kills      "$(count $RUN_DIR/oom-kills)"
+emit uv_events      "$(count $RUN_DIR/uv_events)"
 
 # --- per-boot watermarks (shareframe-health) ---
-[ -r /run/shareframe/temp_peak ] && awk '{ printf "temp_peak_celsius=%.1f\n", $1 / 1000 }' /run/shareframe/temp_peak
-[ -r /run/shareframe/ram_avail_min ] && awk '{ printf "ram_available_min_bytes=%.0f\n", $1 * 1024 }' /run/shareframe/ram_avail_min
+[ -r $RUN_DIR/temp_peak ] && awk '{ printf "temp_peak_celsius=%.1f\n", $1 / 1000 }' $RUN_DIR/temp_peak
+[ -r $RUN_DIR/ram_avail_min ] && awk '{ printf "ram_available_min_bytes=%.0f\n", $1 * 1024 }' $RUN_DIR/ram_avail_min
 
 # --- per app service memory: VmData = heap + thread stacks (musl has no mallinfo) ---
 for svc in display dashboard websocket heartbeat update; do
-	pid=$(s6-svstat -o pid "/run/service/shareframe-$svc" 2>/dev/null)
+	pid=$(s6-svstat -o pid "$SVC/shareframe-$svc" 2>/dev/null)
 	case "$pid" in ''|-*|*[!0-9]*) continue ;; esac
-	[ -r "/proc/$pid/status" ] || continue
+	[ -r "$PROC/$pid/status" ] || continue
 	awk -v p="proc_${svc}_" '
 		/^VmRSS:/   { printf "%srss_bytes=%.0f\n",      p, $2 * 1024 }
 		/^VmHWM:/   { printf "%srss_peak_bytes=%.0f\n", p, $2 * 1024 }
 		/^VmData:/  { printf "%sheap_bytes=%.0f\n",     p, $2 * 1024 }
 		/^VmStk:/   { printf "%sstack_bytes=%.0f\n",    p, $2 * 1024 }
 		/^Threads:/ { printf "%sthreads=%d\n",          p, $2 }
-	' "/proc/$pid/status"
-	emit "proc_${svc}_fds" "$(ls "/proc/$pid/fd" 2>/dev/null | wc -l)"
+	' "$PROC/$pid/status"
+	emit "proc_${svc}_fds" "$(ls "$PROC/$pid/fd" 2>/dev/null | wc -l)"
 done
 
 # --- memory (bytes) ---
 # %.0f everywhere bytes are printed: busybox awk %d clamps to 32-bit on ARM.
-[ -r /proc/meminfo ] && awk '
+[ -r "$PROC/meminfo" ] && awk '
 	/^MemTotal:/     { printf "ram_total_bytes=%.0f\n",     $2 * 1024 }
 	/^MemAvailable:/ { printf "ram_available_bytes=%.0f\n", $2 * 1024 }
-' /proc/meminfo
+' "$PROC/meminfo"
 
 # --- storage (bytes) for /data (writable) and / (rootfs) ---
 storage() {  # $1=mountpoint  $2=key prefix
@@ -94,13 +102,13 @@ storage() {  # $1=mountpoint  $2=key prefix
 		printf "%s_free_bytes=%.0f\n",  p, $4 * 1024
 	}'
 }
-storage /data storage_data
-storage /     storage_root
+storage "$DATA_MNT" storage_data
+storage "$ROOT_MNT" storage_root
 
 # --- SD card wear (f2fs lifetime writes on /data = p6) + card identity ---
-F2FS_WRITES=/sys/fs/f2fs/mmcblk0p6/lifetime_write_kbytes
+F2FS_WRITES=$SYSFS/fs/f2fs/mmcblk0p6/lifetime_write_kbytes
 [ -r "$F2FS_WRITES" ] && awk '{ printf "data_written_kb=%.0f\n", $1 }' "$F2FS_WRITES"
-SD=/sys/block/mmcblk0/device
+SD=$SYSFS/block/mmcblk0/device
 if [ -r "$SD/name" ]; then
 	# Charset limited so the value stays a string and survives the backend's log regex.
 	emit sd_card "$(printf '%s mfr=%s oem=%s date=%s' "$(cat "$SD/name")" "$(cat "$SD/manfid" 2>/dev/null)" \
@@ -108,30 +116,32 @@ if [ -r "$SD/name" ]; then
 fi
 
 # --- display safe mode reason (boot-guard / display-crash-guard) ---
-[ -r /run/shareframe/safe-mode ] && emit safe_mode "$(head -1 /run/shareframe/safe-mode)"
+[ -r $RUN_DIR/safe-mode ] && emit safe_mode "$(head -1 $RUN_DIR/safe-mode)"
 
 # --- CPU temperature (°C); thermal zone may be absent on this kernel ---
-TZ_TEMP=/sys/class/thermal/thermal_zone0/temp
+TZ_TEMP=$SYSFS/class/thermal/thermal_zone0/temp
 [ -r "$TZ_TEMP" ] && awk '{ printf "cpu_temp_celsius=%.1f\n", $1 / 1000 }' "$TZ_TEMP"
 
 # --- CPU frequency (MHz); cpufreq may be absent on this kernel ---
-CUR_FREQ=/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
+CUR_FREQ=$SYSFS/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
 [ -r "$CUR_FREQ" ] && awk '{ printf "cpu_freq_mhz=%d\n", $1 / 1000 }' "$CUR_FREQ"
 
 # --- load average ---
-if [ -r /proc/loadavg ]; then
-	read -r l1 l5 l15 _rest < /proc/loadavg
+if [ -r "$PROC/loadavg" ]; then
+	read -r l1 l5 l15 _rest < "$PROC/loadavg"
 	emit load_1 "$l1"
 	emit load_5 "$l5"
 	emit load_15 "$l15"
 fi
 
 # --- CPU usage % (two /proc/stat samples) ---
-if [ -r /proc/stat ]; then
-	set -- $(awk '/^cpu /{ print $2,$3,$4,$5,$6,$7,$8; exit }' /proc/stat)
+if [ -r "$PROC/stat" ]; then
+	# shellcheck disable=SC2046 # one field per positional parameter
+	set -- $(awk '/^cpu /{ print $2,$3,$4,$5,$6,$7,$8; exit }' "$PROC/stat")
 	idle1=$4;  total1=$(( $1 + $2 + $3 + $4 + $5 + $6 + $7 ))
 	sleep 0.2 2>/dev/null || sleep 1
-	set -- $(awk '/^cpu /{ print $2,$3,$4,$5,$6,$7,$8; exit }' /proc/stat)
+	# shellcheck disable=SC2046 # one field per positional parameter
+	set -- $(awk '/^cpu /{ print $2,$3,$4,$5,$6,$7,$8; exit }' "$PROC/stat")
 	idle2=$4;  total2=$(( $1 + $2 + $3 + $4 + $5 + $6 + $7 ))
 	dt=$(( total2 - total1 ));  di=$(( idle2 - idle1 ))
 	[ "$dt" -gt 0 ] && emit cpu_usage_percent \
@@ -148,8 +158,8 @@ ipv4 usb0     ip_usb0
 
 # --- WLAN mode + SSID (published by wifi-mode-manager) ---
 # wifi-mode.json also holds ap_password — only ever read mode/ssid/ap_ssid.
-WMODE_FILE=/run/shareframe/wifi-mode
-WJSON=/run/shareframe/wifi-mode.json
+WMODE_FILE=$RUN_DIR/wifi-mode
+WJSON=$RUN_DIR/wifi-mode.json
 if [ -r "$WMODE_FILE" ]; then
 	wmode=$(cat "$WMODE_FILE")
 	emit wifi_mode "$wmode"
@@ -165,7 +175,7 @@ fi
 # nl80211 via iw: the kernel has no CFG80211_WEXT, so /proc/net/wireless stays empty.
 iw dev "$IFACE" link 2>/dev/null | awk '/signal:/ { printf "wlan_signal_dbm=%d\n", $2; exit }'
 
-OPER="/sys/class/net/${IFACE}/operstate"
+OPER="$SYSFS/class/net/${IFACE}/operstate"
 if [ -r "$OPER" ]; then
 	[ "$(cat "$OPER")" = "up" ] && emit wlan_connected true || emit wlan_connected false
 fi

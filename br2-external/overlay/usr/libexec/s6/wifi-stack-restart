@@ -1,25 +1,28 @@
 #!/bin/sh
 
 SERVICE="$1"
-LOCK_DIR=/run/wifi-stack-restart.lock
+RUN="${RUN:-/run}"
+SVC="${SVC:-/run/service}"
+CONSOLE="${CONSOLE:-/dev/console}"
+LOCK_DIR="$RUN/wifi-stack-restart.lock"
 PID_FILE="$LOCK_DIR/pid"
 
 log() {
-    echo "wifi-stack-restart: $*" > /dev/console
+    echo "wifi-stack-restart: $*" > "$CONSOLE"
 }
 
 # Don't fight an intentional shutdown: re-upping wifi would hang s6-rc's down transition.
-if [ -e /run/shutting-down ]; then
+if [ -e "$RUN/shutting-down" ]; then
     exit 0
 fi
 
 # Don't fight the mode-manager mid-switch: re-upping would defeat the AP fallback.
-if [ -e /run/shareframe/wifi-switching ]; then
+if [ -e "$RUN/shareframe/wifi-switching" ]; then
     exit 0
 fi
 
 # After the guards: don't repaint the LED over a shutdown or AP switch.
-/usr/bin/shareframe-led wifi-connecting 2>/dev/null || true
+shareframe-led wifi-connecting 2>/dev/null || true
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
@@ -51,8 +54,8 @@ if ip link show wlan0 >/dev/null 2>&1; then
 fi
 
 # Restart each (wpa first — dhcpcd-wlan waits on its ctrl socket).
-if ! s6-svc -r /run/service/wpa_supplicant; then
+if ! s6-svc -r "$SVC/wpa_supplicant"; then
     log "failed to restart wpa_supplicant"
     exit 1
 fi
-s6-svc -r /run/service/dhcpcd-wlan || log "failed to restart dhcpcd-wlan"
+s6-svc -r "$SVC/dhcpcd-wlan" || log "failed to restart dhcpcd-wlan"

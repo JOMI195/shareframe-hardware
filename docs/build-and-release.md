@@ -59,8 +59,17 @@ cp ~/.shareframe-release-keys/ca.cert.pem configs/fleet/<env>/overlay/etc/rauc/c
 ```
 
 Without an argument (`./automation.sh build`) the tracked defaults are used and
-the build defaults to **dev mode** (so the prod guards don't apply) — handy for
-QEMU, but it lacks the prod CA so prod boards reject those bundles.
+the build defaults to **dev mode** (so the prod guards don't apply), but it lacks
+the prod CA so prod boards reject those bundles.
+
+### Simulator
+
+`configs/sim` is the QEMU simulator image (hwsim Wi-Fi, mock display). It is built and run by
+`tests/system/sim.sh` into `~/.cache/shareframe-sim`, never into `build/` or `artifacts/`;
+see `README.tests.md`. For that, `automation.sh` takes
+`SHAREFRAME_BR_DIR` (Buildroot tree), `SHAREFRAME_ARTIFACTS_DIR` (builds), and a config's
+`kernel.fragment`, `buildroot.fragment` and `linux-patches/` (kernel patches for that config
+only). A change to `linux-patches/` needs `make linux-dirclean` in that Buildroot tree.
 
 ### Per-device (provision, no rebuild)
 

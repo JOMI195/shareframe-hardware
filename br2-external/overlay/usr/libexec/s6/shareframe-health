@@ -11,6 +11,7 @@ THERMAL="${THERMAL:-/sys/class/thermal/thermal_zone0/temp}"
 STATE_DIR="${STATE_DIR:-/run/shareframe}"
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 DMESG="${DMESG:-dmesg}"
+CONSOLE="${CONSOLE:-/dev/console}"
 
 # Tunables
 INTERVAL="${INTERVAL:-30}"           # main loop cadence (seconds)
@@ -28,7 +29,7 @@ now() { date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null; }
 log() {  # $1=source $2..=message -> event log + console
 	src=$1; shift
 	DATA_DIR="$DATA_DIR" shareframe-event "$src" "$*"
-	printf 'shareframe-health: [%s] %s\n' "$src" "$*" > /dev/console 2>/dev/null || true
+	printf 'shareframe-health: [%s] %s\n' "$src" "$*" > "$CONSOLE" 2>/dev/null || true
 }
 
 # Emit a log line only when a check changes state (dedup), then remember it.
@@ -148,5 +149,6 @@ while :; do
 	watermarks
 	# Only remediation: claim the LED on a critical fault (never reset it).
 	[ "$overall" = critical ] && shareframe-led error 2>/dev/null || true
+	[ "${ONCE:-0}" = 1 ] && break
 	sleep "$INTERVAL"
 done

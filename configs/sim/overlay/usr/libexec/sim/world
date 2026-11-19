@@ -1,0 +1,188 @@
+#!/bin/sh
+# The board's surroundings in the simulator. hwsim radios 1-3 and the slirp
+# uplink live in their own netns so the board only reaches them over the air:
+#   world  home + office access points bridged onto the uplink (DHCP, internet)
+#   phone  a client that joins the board's hotspot
+# usage: world init [--uplink-down] | status
+#        world ap <home|office> up|down|psk <pass>
+#        world uplink up|down
+#        world phone join [ssid pass] | leave | get <path>
+set -eu
+
+RUN=/run/sim
+UPLINK_MAC=52:54:00:5f:00:02
+W="ip netns exec world"
+P="ip netns exec phone"
+
+die() { echo "world: $*" >&2; exit 1; }
+
+nic_by_mac() {
+	for n in /sys/class/net/*; do
+		[ "$(cat "$n/address" 2>/dev/null)" = "$1" ] && { basename "$n"; return 0; }
+	done
+	return 1
+}
+
+phy_of() { basename "$(readlink -f "/sys/class/net/$1/phy80211")"; }
+
+ap_iface() {
+	case "$1" in
+		home) echo wlan1 ;;
+		office) echo wlan2 ;;
+		*) die "unknown network '$1' (home, office)" ;;
+	esac
+}
+
+# QEMU's usb-net holds a received packet until the next one arrives, which stalls the
+# tail of every transfer on an idle link. A steady trickle flushes it.
+uplink_keepalive() {
+	if [ -f "$RUN/keepalive-uplink.pid" ] && kill -0 "$(cat "$RUN/keepalive-uplink.pid")" 2>/dev/null; then return 0; fi
+	$W sh -c 'while :; do ping -q -i 1 10.0.2.2; sleep 1; done' >/dev/null 2>&1 &
+	echo $! > "$RUN/keepalive-uplink.pid"
+}
+
+ap_running() { [ -f "$RUN/$1.pid" ] && kill -0 "$(cat "$RUN/$1.pid")" 2>/dev/null; }
+
+ap_up() {
+	name="$1"
+	ap_running "$name" && return 0
+	iface="$(ap_iface "$name")"
+	cat > "$RUN/$name.conf" <<EOF
+interface=$iface
+bridge=br0
+driver=nl80211
+ssid=$name
+hw_mode=g
+channel=$([ "$name" = home ] && echo 1 || echo 6)
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=$(cat "$RUN/$name.psk")
+ctrl_interface=$RUN/hostapd
+EOF
+	$W hostapd -B -P "$RUN/$name.pid" "$RUN/$name.conf" >/dev/null
+}
+
+ap_down() {
+	ap_running "$1" && kill "$(cat "$RUN/$1.pid")"
+	rm -f "$RUN/$1.pid"
+	i=0
+	while $W ip link show master br0 2>/dev/null | grep -q "$(ap_iface "$1")" && [ "$i" -lt 20 ]; do
+		sleep 0.2; i=$((i + 1))
+	done
+}
+
+init() {
+	[ -f "$RUN/ready" ] && return 0
+	mkdir -p "$RUN"
+	printf 'home-pass-123' > "$RUN/home.psk"
+	printf 'office-pass-123' > "$RUN/office.psk"
+	ip netns add world
+	ip netns add phone
+	uplink="$(nic_by_mac "$UPLINK_MAC")" || die "uplink NIC $UPLINK_MAC missing"
+	ip link set "$uplink" netns world
+	for i in 1 2; do iw phy "$(phy_of "wlan$i")" set netns name world; done
+	iw phy "$(phy_of wlan3)" set netns name phone
+	echo "$uplink" > "$RUN/uplink"
+
+	$W ip link set lo up
+	$W ip link add br0 type bridge
+	$W ip link set "$uplink" master br0
+	[ "${1:-}" = --uplink-down ] || $W ip link set "$uplink" up
+	$W ip link set br0 up
+	$W ip addr add 10.0.2.250/24 dev br0
+	$P ip link set lo up
+
+	uplink_keepalive
+	ping -q -i 1 10.55.0.2 >/dev/null 2>&1 &
+	echo $! > "$RUN/keepalive-usb.pid"
+
+	cat > "$RUN/udhcpc.sh" <<'EOF'
+#!/bin/sh
+case "$1" in
+	deconfig) ip addr flush dev "$interface"; ip link set "$interface" up ;;
+	bound|renew)
+		ip addr replace "$ip/${mask:-24}" dev "$interface"
+		echo "${router%% *}" > /run/sim/phone.router ;;
+esac
+EOF
+	chmod +x "$RUN/udhcpc.sh"
+
+	ap_up home
+	ap_up office
+	touch "$RUN/ready"
+}
+
+phone_join() {
+	ssid="${1:-}" pass="${2:-}"
+	if [ -z "$ssid" ]; then
+		# shellcheck disable=SC1091
+		. /data/wifi/ap.conf
+		ssid="$AP_SSID" pass="$AP_PASS"
+	fi
+	phone_leave
+	cat > "$RUN/phone.conf" <<EOF
+ctrl_interface=$RUN/phone-wpa
+network={
+	ssid="$ssid"
+	psk="$pass"
+}
+EOF
+	$P wpa_supplicant -B -i wlan3 -P "$RUN/phone-wpa.pid" -c "$RUN/phone.conf" >/dev/null
+	$P udhcpc -i wlan3 -q -n -t 30 -T 2 -s "$RUN/udhcpc.sh" >/dev/null 2>&1 \
+		|| die "phone got no address from '$ssid'"
+	echo "joined $ssid ip=$($P ip -4 -o addr show wlan3 | awk '{print $4}') router=$(cat "$RUN/phone.router")"
+}
+
+phone_leave() {
+	[ -f "$RUN/phone-wpa.pid" ] && kill "$(cat "$RUN/phone-wpa.pid")" 2>/dev/null || true
+	rm -f "$RUN/phone-wpa.pid" "$RUN/phone.router"
+	$P ip addr flush dev wlan3 2>/dev/null || true
+}
+
+status() {
+	for n in home office; do
+		if ap_running "$n"; then s=up; else s=down; fi
+		echo "$n=$s psk=$(cat "$RUN/$n.psk")"
+	done
+	if $W ip -o link show "$(cat "$RUN/uplink")" | grep -q '[<,]UP[,>]'; then echo "uplink=up"; else echo "uplink=down"; fi
+	if [ -f "$RUN/phone.router" ] && $P iw dev wlan3 link | grep -q '^Connected'; then
+		echo "phone=joined ip=$($P ip -4 -o addr show wlan3 | awk '{print $4}')"
+	else
+		echo "phone=idle"
+	fi
+}
+
+cmd="${1:-}"
+[ "$cmd" = init ] || [ -f "$RUN/ready" ] || die "not initialised (world init)"
+case "$cmd" in
+	init) shift; init "$@" ;;
+	status) status ;;
+	ap)
+		name="${2:-}"; ap_iface "$name" >/dev/null
+		case "${3:-}" in
+			up) ap_up "$name" ;;
+			down) ap_down "$name" ;;
+			psk)
+				[ -n "${4:-}" ] || die "psk needs a passphrase"
+				[ "$(cat "$RUN/$name.psk")" = "$4" ] && exit 0
+				printf '%s' "$4" > "$RUN/$name.psk"
+				if ap_running "$name"; then ap_down "$name"; ap_up "$name"; fi ;;
+			*) die "ap $name up|down|psk <pass>" ;;
+		esac ;;
+	uplink)
+		case "${2:-}" in
+			up|down) $W ip link set "$(cat "$RUN/uplink")" "$2" ;;
+			*) die "uplink up|down" ;;
+		esac ;;
+	phone)
+		case "${2:-}" in
+			join) shift 2; phone_join "$@" ;;
+			leave) phone_leave ;;
+			get)
+				[ -f "$RUN/phone.router" ] || die "phone has not joined a network"
+				$P curl -fsS -m 15 "http://$(cat "$RUN/phone.router")${3:-/}" ;;
+			*) die "phone join [ssid pass] | leave | get <path>" ;;
+		esac ;;
+	*) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

@@ -2,13 +2,15 @@
 # Schedule a factory reset: next boot wipes /data and re-seeds from the factory
 # store (p5). Mark lives on /data, so the wipe itself clears it.
 set -e
+RESET_MARK="${RESET_MARK:-/data/.factory-reset}"
+CONSOLE="${CONSOLE:-/dev/console}"
 [ "$(id -u)" = 0 ] || { echo "factory-reset: must run as root" >&2; exit 1; }
 case "${1:-}" in
 	--yes|-y) ;;
 	*) echo "factory-reset: destructive — wipes ALL device state (db, images, wifi, ssh keys); re-run with --yes" >&2; exit 1 ;;
 esac
 
-touch /data/.factory-reset
+touch "$RESET_MARK"
 sync
-echo "factory-reset: scheduled; rebooting to apply" > /dev/console
+echo "factory-reset: scheduled; rebooting to apply" > "$CONSOLE"
 exec reboot

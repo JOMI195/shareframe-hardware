@@ -10,6 +10,7 @@ STATE_DIR="${STATE_DIR:-/data/rauc}"
 CMDLINE="${CMDLINE:-/proc/cmdline}"
 PENDING="$STATE_DIR/pending"
 TRYBOOT_FLAG="${TRYBOOT_FLAG:-/run/tryboot}"
+FW_LOCK="${FW_LOCK:-/run/shareframe/fw.lock}"
 
 prefix_slot() { # "A/" -> A
 	case "$1" in
@@ -20,14 +21,19 @@ prefix_slot() { # "A/" -> A
 }
 other_slot() { [ "$1" = A ] && echo B || echo A; }
 
+# Only the mount this call made is undone: a reader must not pull p1 from under a commit.
+MOUNTED=0
 mount_fw() {
 	[ "${NO_MOUNT:-0}" = 1 ] && return 0
 	mkdir -p "$FW_MNT"
-	mountpoint -q "$FW_MNT" || mount -t vfat -o "$1" "$FW_DEV" "$FW_MNT"
+	mountpoint -q "$FW_MNT" && return 0
+	mount -t vfat -o "$1" "$FW_DEV" "$FW_MNT"
+	MOUNTED=1
 }
 umount_fw() {
-	[ "${NO_MOUNT:-0}" = 1 ] && return 0
+	[ "$MOUNTED" = 1 ] || return 0
 	umount "$FW_MNT" 2>/dev/null || true
+	MOUNTED=0
 }
 
 committed_slot() { # parse os_prefix from config.txt
@@ -51,6 +57,11 @@ commit_slot() { # swap os_prefix lines so $1 is the committed slot
 	sync
 	umount_fw
 }
+
+# RAUC, rauc-mark-good, rauc-reconcile and the update service all call in; one at a time.
+mkdir -p "$(dirname "$FW_LOCK")"
+exec 9>"$FW_LOCK"
+flock 9
 
 cmd="${1:-}"
 case "$cmd" in

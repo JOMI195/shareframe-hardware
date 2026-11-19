@@ -3,10 +3,13 @@
 # Intended stops (wanted down) are silent; restarts and crashes go to the event log.
 # Exits 2 for a counted crash.
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 svc=$1; code=${2:-0}; sig=${3:-0}
-DATA_DIR=/data/shareframe
+DATA_DIR="${DATA_DIR:-/data/shareframe}"
+SVC="${SVC:-/run/service}"
 
-[ "$(s6-svstat -o wantedup "/run/service/$svc" 2>/dev/null)" = true ] || exit 0
+[ "$(s6-svstat -o wantedup "$SVC/$svc" 2>/dev/null)" = true ] || exit 0
 
 if [ "$code" = 256 ]; then
 	case "$sig" in
@@ -23,5 +26,5 @@ shareframe-event crash "$svc $reason"
 f=$DATA_DIR/crash_count
 n=$(cat "$f" 2>/dev/null || echo 0)
 case "$n" in ''|*[!0-9]*) n=0 ;; esac
-echo "$((n + 1))" > "$f.tmp" && mv "$f.tmp" "$f"
+write_durable "$f" "$((n + 1))"
 exit 2

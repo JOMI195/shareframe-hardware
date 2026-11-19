@@ -2,7 +2,7 @@
 # Clean f2fs shutdown: flush + final checkpoint so the next boot needs no recovery.
 : > /data/shareframe/clean-shutdown 2>/dev/null
 sync
-for i in 1 2 3 4 5; do
+for _ in 1 2 3 4 5; do
 	umount /data 2>/dev/null && exit 0
 	sleep 1
 done
