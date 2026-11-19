@@ -102,8 +102,9 @@ image's files over their paths and wires veth pairs; peers are entered with `nse
 (`ip netns exec` wants to remount `/sys`, which a container refuses). The container gets
 `seccomp`, `apparmor` and `label` relaxed, never `--privileged` or devices.
 
-- `nginx.bats`: the dashboard SPA and its client routes, `/api` to the backend, the
-  board's JSON envelope when the backend is down, the captive-portal probes, SSDP.
+- `nginx.bats`: the dashboard SPA and its client routes, `/api` to the backend (also one
+  that serves a single request per connection, like the board's), the board's JSON envelope
+  when the backend is down, its errors in syslog, the captive-portal probes, SSDP.
 - `usb0.bats`: `setup-usb0` and the image's `udhcpd.conf` lease 10.55.0.2 to the
   computer on the cable, without a router or DNS.
 
@@ -217,6 +218,8 @@ are no shims: assert on the board's real state, the server and the panel.
 - The emulated CPU and USB network are slow: a 30 MB bundle downloads in about 4 minutes,
   and the first `build` takes about an hour. QEMU cannot snapshot a VM with USB network, so
   `reset` is a cold boot.
+- `power-cut` quits QEMU over its QMP socket, without a shutdown in the guest. Killing
+  QEMU instead would also drop the disk writes it still holds, not only the guest's.
 - Two QEMU quirks are worked around in the simulator's own parts, never in board code:
   - `usb-net` holds a received packet until the next one arrives, so `world` keeps a ping
     running on both NICs.
@@ -229,3 +232,22 @@ are no shims: assert on the board's real state, the server and the panel.
 
   A transfer that stalls at its very end, or a board where `sleep 1` never returns, points
   at these first.
+
+## Hardware-only checklist
+
+What no tier here can reach, checked by hand on a real Pi Zero W with the release image,
+before a release and after changes to the parts named. Serial console or `ssh root@10.55.0.1`
+over the USB cable.
+
+| Part | Check | Expected |
+|---|---|---|
+| e-paper (SPI) | boot; change a picture on the server | boot screen, then the picture; no ghosting after the refresh gap |
+| ACT LED | `shareframe-led wifi-down`, `ap-mode`, `updating`, then `normal` | the codes in `docs/led-status-codes.md` |
+| brcmfmac | join a WPA2 network; pull the router's power for 2 min | joined within 45 s; hotspot after the timeout; rejoins when the router is back |
+| hotspot | join from a phone, open any site | the captive portal opens the dashboard |
+| USB gadget (dwc2) | plug into a computer | the computer gets 10.55.0.2; `ssh root@10.55.0.1` works, not over Wi-Fi |
+| tryboot | install an update; then one whose trial is broken | the first commits after its reboot; the second boots back to the old slot |
+| SD card power cut | pull the power during a picture change, 5 times | boots every time, `unclean_resets` counts each, pictures and settings kept |
+| pstore | `echo c > /proc/sysrq-trigger` | after the reset: an unclean boot event with `pstore=`, the panic in the diagnostics `last-reset` section |
+| clock | boot without network, then with | time from the saved clock first, NTP once online; certificates accepted |
+| temperature | an hour of slideshow at the fastest interval | `/run/shareframe/health.json` reads the real thermal zone and stays `"temp":"ok"` |
