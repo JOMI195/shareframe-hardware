@@ -8,7 +8,8 @@ import {
 const VERSION = process.env.SIM_UPDATE_VERSION ?? '1.0.1';
 const BUNDLE = `shareframe-${VERSION}.raucb`;
 
-// The rollback runs first: it leaves the frame on its old release, ready for the real install.
+// The corrupt bundle and the rollback run first: both leave the frame on its old release, ready
+// for the real install.
 test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ request }) => {
@@ -27,6 +28,23 @@ async function install(board: import('@board/board').BoardApi, server: import('@
     })
     .toBe(trialBoots + 1);
 }
+
+test('a bundle that is not what the server announced is never installed', async ({ board, server }) => {
+  await server.waitForFrame();
+  const before = (await boots()).length;
+  const version = await installedVersion();
+  await server.offerRelease({ version: VERSION, bundleFile: BUNDLE, corrupt: true });
+  await board.post('/api/system/updates/perform-update');
+
+  await expect
+    .poll(async () => (await board.get('/api/system/updates/status')).phase, { message: 'update failed', timeout: 15 * 60_000, intervals: [5000] })
+    .toBe('failed');
+  expect((await board.get('/api/system/updates/history')).history[0]).toMatchObject({ result: 'install-failed' });
+  expect((await boots()).length).toBe(before);
+  expect(await installedVersion()).toBe(version);
+  expect(await pendingSlot()).toBe('');
+  await onBoard('s6-svc -r /run/service/shareframe-update');
+});
 
 test('a release that does not come up rolls back to the slot it came from', async ({ board, server }) => {
   const slot = await bootedSlot();

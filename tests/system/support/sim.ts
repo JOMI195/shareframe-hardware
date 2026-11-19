@@ -64,10 +64,11 @@ export const pendingSlot = async () => (await onBoard('shareframe-slot pending')
 export const installedVersion = async () =>
   (await onBoard("sed -n 's/^VERSION=//p' /etc/shareframe-release")).toString().trim();
 
-/** Boots the firmware stand-in has done, e.g. `boot 2 slot=B from=tryboot.txt`. */
+/** Boots the firmware stand-in has done, e.g. `boot 2 slot=B from=tryboot.txt`; power cuts and
+ *  power-offs are left out. */
 export async function boots(): Promise<string[]> {
   const log = await readFile(`${SIM_RUN}/boots.log`, 'utf8').catch(() => '');
-  return log.split('\n').filter(Boolean).map((l) => l.replace(/^\S+ /, ''));
+  return log.split('\n').map((l) => l.replace(/^\S+ /, '')).filter((l) => /^boot \d+ /.test(l));
 }
 
 /** Makes the next trial boot panic, like a release that does not come up. */
@@ -82,4 +83,19 @@ export async function waitForBoard(timeout = 10 * 60_000) {
       message: 'board back up with its routers', timeout, intervals: [3000],
     })
     .toBe(true);
+}
+
+/** Pulls the plug: QEMU dies without a shutdown and the firmware stand-in boots again. */
+export async function powerCut() {
+  await writeFile(`${SIM_RUN}/power-cut`, '');
+}
+
+/** One key of shareframe-sysinfo on the board. */
+export async function sysinfo(key: string) {
+  return (await onBoard(`shareframe-sysinfo | sed -n 's/^${key}=//p'`)).toString().trim();
+}
+
+/** The board's last boot record from its event log, e.g. `version=1.0.0 slot=A boot_count=3 unclean=0`. */
+export async function lastBootRecord() {
+  return (await onBoard("shareframe-event --since 0 | grep '\\[boot\\]' | tail -1 | cut -d' ' -f4-")).toString().trim();
 }

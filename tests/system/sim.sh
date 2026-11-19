@@ -176,6 +176,14 @@ firmware() {
 				sleep 0.5
 				kill "$qpid" 2>/dev/null || true
 			fi
+			# The plug pulled: no shutdown in the guest. QEMU itself quits cleanly, so the card keeps
+			# what was written to it (a SIGKILL would drop the qcow2 metadata QEMU still holds).
+			if [ -f "$RUN/power-cut" ]; then
+				rm -f "$RUN/power-cut"
+				echo "$(date -Is) power cut" >> "$RUN/boots.log"
+				printf '{"execute":"qmp_capabilities"}\n{"execute":"quit"}\n' \
+					| socat - "UNIX-CONNECT:$RUN/qmp.sock" >/dev/null 2>&1 || kill "$qpid" 2>/dev/null || true
+			fi
 			sleep 0.5
 		done
 		wait "$qpid" || true
@@ -201,7 +209,7 @@ post() { # <path> [json]
 # ---- lifecycle
 
 cmd_up() {
-	need qemu-system-arm qemu-img mtype mcopy sfdisk jq ssh curl docker setsid
+	need qemu-system-arm qemu-img mtype mcopy sfdisk jq ssh curl docker setsid socat
 	running && die "already up (sim.sh down first)"
 	[ -f "$IMAGE" ] || die "no image yet, run: sim.sh build"
 	for p in "$SSH_PORT" "$HTTP_PORT" "$SERVER_PORT"; do
@@ -403,7 +411,11 @@ cmd_update() {
 			running || die "not up"
 			touch "$RUN/break-trial"
 			echo "the next trial boot panics" ;;
-		*) die "update bundle <version> | offer <version> [--corrupt] [--criticality C] [--notes TEXT] | break-trial" ;;
+		power-cut)
+			running || die "not up"
+			touch "$RUN/power-cut"
+			echo "the board loses power and boots again" ;;
+		*) die "update bundle <version> | offer <version> [--corrupt] [--criticality C] [--notes TEXT] | break-trial | power-cut" ;;
 	esac
 }
 
@@ -489,7 +501,8 @@ usage: tests/system/sim.sh <command>
                            phone join [ssid pass]|leave|get <path>, status
   server ...               picture [file] [expires], remove <id>..., clear, send <json>, garbage,
                            outage on|off, unregistered on|off, disconnect [code], state, reset
-  update ...               bundle <version>, offer <version> [--corrupt] [--criticality C], break-trial
+  update ...               bundle <version>, offer <version> [--corrupt] [--criticality C], break-trial,
+                           power-cut (pull the plug; the board boots again)
   deploy                   build the working tree into a bundle and install it with RAUC
   test [playwright args]   run tests/system/specs against the running board
   check                    list the specs in the runner: imports and types resolve, no board needed

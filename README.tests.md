@@ -165,6 +165,7 @@ display, hwsim and bridge in the kernel, iproute2). The firmware stand-in adds
 | `update bundle <version>` | builds the image at that version and signs a dev bundle into the cache |
 | `update offer <version> [--corrupt] [--criticality C]` | the fake server offers it; install from the dashboard or `POST /api/system/updates/perform-update` |
 | `update break-trial` | the next trial boot panics, so the update rolls back |
+| `update power-cut` | pulls the plug: QEMU dies without a shutdown and the board boots again |
 | `deploy` | builds the working tree of both repos into a bundle and installs it with RAUC: the real update path, no copied binaries |
 | `test [playwright args]` | runs `tests/system/specs` in a container against the running board |
 | `check` | lists the specs in that container: every import resolves, no board needed |
@@ -189,8 +190,17 @@ and `update` to change the world → `status`, `panel`, `logs` to see what the b
 ### Specs
 
 `tests/system/specs/*.system.spec.ts`, with `playwright.config.ts` and `tsconfig.json` next to
-them. `support/sim.ts` has `world()`, `waitForWifi()`, slots, `boots()` and
-`breakNextTrial()`. Everything else comes from shareframe-board's `tests/e2e/support`
+them:
+
+- `network`: the saved network, the hotspot and a phone setting up a new one, roaming, a
+  changed router password, an internet outage.
+- `update`: a corrupt bundle, a trial boot that fails and rolls back, a real install that is
+  committed and survives a reboot.
+- `board`: a power cut (counted unclean), a remote reboot (clean, rate-limited), the
+  services page against real s6, the support package, the hotspot password a phone needs.
+
+`support/sim.ts` has `world()`, `waitForWifi()`, slots, `boots()`, `breakNextTrial()`,
+`powerCut()`, `sysinfo()` and `lastBootRecord()`. Everything else comes from shareframe-board's `tests/e2e/support`
 through `@board/*`: `FakeServer`, `BoardApi`, `signIn`, the panel helpers. The runner mounts
 both repos side by side under `/w` with one `node_modules` from the board repo's lockfile,
 so the Playwright version is the board's. The panel is read over ssh (`BOARD_SSH`). There
