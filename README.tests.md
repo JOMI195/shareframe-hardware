@@ -199,7 +199,8 @@ them:
   changed router password, an internet outage.
 - `update`: a corrupt bundle, one signed with a foreign key, a trial boot that fails and
   rolls back, a real install that is committed and survives a reboot, a release whose
-  migration deletes the Wi-Fi config (update-verify restores it, the update commits).
+  migration deletes the identity, the database and the Wi-Fi config (the trial boot restores
+  them before anything reads `/data`, the update commits, nothing is lost).
 - `clock`: NTP corrects a wrong clock and saves it; a boot without network starts from the
   saved time and the apps still come up; a request the clock steps forward in is answered.
 - `board`: a power cut (counted unclean), a remote reboot (clean, rate-limited), the

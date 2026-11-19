@@ -1,7 +1,8 @@
-import { onBoard } from '@board/board';
+import { BoardApi, onBoard } from '@board/board';
 import { signIn } from '@board/fixtures';
 import {
-  bootedSlot, boots, breakNextTrial, expect, installedVersion, pendingSlot, resetWorld, test, waitForBoard, waitForWifi,
+  bootedSlot, boots, breakNextTrial, expect, installedVersion, pendingSlot, rebootCleanly, resetWorld, test, waitForBoard,
+  waitForWifi,
 } from '../support/sim';
 
 // A real bundle from `tests/system/sim.sh update bundle <version>`; `sim.sh test` builds it when missing.
@@ -114,20 +115,33 @@ test('a release installs into the other slot, boots once on trial and is committ
 });
 
 // /data is shared by both slots and only the new release migrates it. update-verify backs up
-// what the frame cannot do without before the install and restores it in the commit gate.
-test('a release whose migration drops the Wi-Fi config is committed with the owner\'s networks back', async ({ board, server }) => {
+// what the frame cannot do without before the install, and the trial boot puts it back right
+// after its migrations, before the seeds and the apps could replace it with factory or empty state.
+test('a release whose migration deletes the identity, the database and the Wi-Fi config is committed with all of them back', async ({ request, board, server }) => {
   await onBoard('shareframe-wifi add office office-pass-123 >/dev/null');
-  expect((await board.get('/api/connection/saved-networks')).networks).toEqual(['home', 'office']);
-  await onBoard('echo wifi > /data/shareframe/sim-break');
+  await board.post('/api/frame/slideshow/interval', { interval_seconds: 1234 });
+  const serial = (await board.get('/api/system/info')).serial_number;
+  await onBoard('echo "wifi secrets db" > /data/shareframe/sim-break');
   const other = (await bootedSlot()) === 'A' ? 'B' : 'A';
 
   await install(board, server, BROKEN);
   await waitForBoard();
   expect(await bootedSlot()).toBe(other);
+  expect((await onBoard('test -e /data/shareframe/sim-break && echo still || echo ran')).toString().trim()).toBe('ran');
   await expect.poll(pendingSlot, { message: 'committed', timeout: 10 * 60_000 }).toBe('');
   expect(await installedVersion()).toBe(BROKEN);
   expect(JSON.parse((await onBoard('cat /data/shareframe/update-verify/last.json')).toString()))
-    .toMatchObject({ wpa_supplicant: 'restored', result: 'ok', to_version: BROKEN });
-  expect((await onBoard('shareframe-wifi list')).toString()).toContain('office');
+    .toMatchObject({ secrets: 'restored', db: 'restored', wpa_supplicant: 'restored', result: 'ok', to_version: BROKEN });
+
+  const owner = new BoardApi(request);
+  await owner.login();
+  expect((await owner.get('/api/system/info')).serial_number).toBe(serial);
+  expect((await owner.slideshowStatus()).interval_seconds).toBe(1234);
+  await server.waitForFrame();
+
+  await rebootCleanly();
+  expect((await onBoard('cat /data/wifi/wpa_supplicant.conf')).toString()).toContain('office');
   await onBoard('shareframe-wifi del office >/dev/null');
+  await owner.login();
+  await owner.post('/api/frame/slideshow/interval', { interval_seconds: 900 });
 });
