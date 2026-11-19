@@ -18,6 +18,17 @@ setup() {
 		'        self.wfile.write(b"{\"success\":true,\"data\":{\"path\":\"" + self.path.encode() + b"\"}}")' \
 		'    def log_message(self, *a): pass' \
 		'http.server.HTTPServer(("127.0.0.1", 8080), H).serve_forever()' > "$T/backend.py"
+	# Like the board's backend: an HTTP/1.1 answer without "Connection: close", one request per
+	# connection, and whatever else arrives on it is dropped when the socket closes.
+	printf '%s\n' 'import http.server, time' \
+		'class H(http.server.BaseHTTPRequestHandler):' \
+		'    protocol_version = "HTTP/1.1"' \
+		'    def handle(self): self.handle_one_request(); time.sleep(0.3)' \
+		'    def do_POST(self):' \
+		'        self.rfile.read(int(self.headers["Content-Length"] or 0))' \
+		'        self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b"{}")' \
+		'    def log_message(self, *a): pass' \
+		'http.server.ThreadingHTTPServer(("127.0.0.1", 8080), H).serve_forever()' > "$T/one-shot-backend.py"
 	# Stands in for busybox syslogd's /dev/log: what nginx logs ends up in /var/log/messages.
 	printf '%s\n' 'import socket' \
 		'sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)' \
@@ -26,7 +37,7 @@ setup() {
 		'while True: out.write(sock.recv(65536) + b"\n")' > "$T/syslog.py"
 }
 
-# board <with-backend|without-backend> <curl args...>: one request against nginx on the board's port 80.
+# board <with-backend|one-shot-backend|without-backend> <curl args...>: one request against nginx on the board's port 80.
 board() {
 	local backend=$1
 	shift
@@ -37,7 +48,10 @@ board() {
 		echo '<root/>' > /run/shareframe/ssdp/description.xml
 		mkdir -p /tmp/nginx
 		bp=
-		if [ '$backend' = with-backend ]; then python3 '$T/backend.py' >/dev/null 2>&1 & bp=\$!; sleep 0.5; fi
+		case '$backend' in
+			with-backend) python3 '$T/backend.py' >/dev/null 2>&1 & bp=\$!; sleep 0.5 ;;
+			one-shot-backend) python3 '$T/one-shot-backend.py' >/dev/null 2>&1 & bp=\$!; sleep 0.5 ;;
+		esac
 		python3 '$T/syslog.py' & sp=\$!
 		sed -i 's#unix:/dev/log#unix:$T/log.sock#' /etc/nginx/nginx.conf
 		sleep 0.3
@@ -63,6 +77,13 @@ board() {
 	run board with-backend http://127.0.0.1/api/system/info
 	assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
 	assert_line --regexp '^200'
+}
+
+# A POST is never retried by nginx, so one sent down a connection the backend already dropped is a 502.
+@test "posts in a row reach a backend that serves one request per connection" {
+	run board one-shot-backend -X POST -d x http://127.0.0.1/api/auth/login http://127.0.0.1/api/auth/login
+	refute_line --regexp '^502'
+	assert_equal "$(grep -c '^200' <<<"$output")" 2
 }
 
 @test "a backend that is down answers in the board's envelope the dashboard can read" {
