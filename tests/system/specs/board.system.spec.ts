@@ -1,7 +1,7 @@
 import { onBoard } from '@board/board';
 import { signIn } from '@board/fixtures';
 import {
-  boots, expect, lastBootRecord, powerCut, resetWorld, sysinfo, test, waitForBoard, waitForWifi, world,
+  boots, consoleLog, expect, rebootCleanly, lastBootRecord, powerCut, resetWorld, sysinfo, test, waitForBoard, waitForWifi, world,
 } from '../support/sim';
 
 // The board's own life on the real image: power, remote commands, its services and its
@@ -78,4 +78,13 @@ test('the hotspot password changed on the dashboard is the one a phone needs', a
   expect(await world('phone', 'join', 'shareframe-sim', 'new-hotspot-1')).toContain('joined shareframe-sim');
   await world('phone', 'leave');
   await board.post('/api/connection/ap-password', { password: 'hotspot123' });
+});
+
+test('the data partition reaches the end of the card on the first boot, and grows only then', async () => {
+  const gap = Number((await onBoard(
+    'b=/sys/block/mmcblk0; echo $(( $(cat $b/size) - $(cat $b/mmcblk0p6/start) - $(cat $b/mmcblk0p6/size) ))',
+  )).toString().trim());
+  expect(gap).toBeLessThan(32768);
+  await rebootCleanly();
+  expect((await consoleLog()).match(/expand-data: growing/g)).toHaveLength(1);
 });

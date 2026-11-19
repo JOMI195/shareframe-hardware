@@ -198,10 +198,15 @@ them:
 - `update`: a corrupt bundle, a trial boot that fails and rolls back, a real install that is
   committed and survives a reboot.
 - `board`: a power cut (counted unclean), a remote reboot (clean, rate-limited), the
-  services page against real s6, the support package, the hotspot password a phone needs.
+  services page against real s6, the support package, the hotspot password a phone needs,
+  `/data` grown to the end of the card on the first boot only.
+- `factory-reset`: the admin's reset wipes the owner's pictures and passwords, the frame
+  keeps its identity and its factory network.
+- `safe-mode`: power cuts in a row and a crashing display keep the display down, the
+  heartbeat tells the admin why, a clean boot lifts it.
 
 `support/sim.ts` has `world()`, `waitForWifi()`, slots, `boots()`, `breakNextTrial()`,
-`powerCut()`, `sysinfo()` and `lastBootRecord()`. Everything else comes from shareframe-board's `tests/e2e/support`
+`powerCut()`, `rebootCleanly()`, `sysinfo()`, `lastBootRecord()` and `consoleLog()`. Everything else comes from shareframe-board's `tests/e2e/support`
 through `@board/*`: `FakeServer`, `BoardApi`, `signIn`, the panel helpers. The runner mounts
 both repos side by side under `/w` with one `node_modules` from the board repo's lockfile,
 so the Playwright version is the board's. The panel is read over ssh (`BOARD_SSH`). There

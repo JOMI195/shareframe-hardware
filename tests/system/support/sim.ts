@@ -99,3 +99,18 @@ export async function sysinfo(key: string) {
 export async function lastBootRecord() {
   return (await onBoard("shareframe-event --since 0 | grep '\\[boot\\]' | tail -1 | cut -d' ' -f4-")).toString().trim();
 }
+
+/** Every boot's console output so far, oldest first. */
+export async function consoleLog() {
+  const read = (f: string) => readFile(`${SIM_RUN}/${f}`, 'utf8').catch(() => '');
+  return (await read('console.log')) + (await read('serial.log'));
+}
+
+/** A clean reboot from the board's shell, until it is back with its routers. */
+export async function rebootCleanly() {
+  const n = (await boots()).length;
+  await onBoard('reboot').catch(() => {});
+  await expect.poll(async () => (await boots()).length, { message: 'booted again', timeout: 5 * 60_000, intervals: [3000] })
+    .toBe(n + 1);
+  await waitForBoard();
+}
