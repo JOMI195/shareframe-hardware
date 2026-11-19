@@ -51,3 +51,14 @@ test('a boot without network starts from the saved clock, and NTP takes over onc
   await expect.poll(synced, { message: 'NTP synced once online', timeout: 6 * 60_000, intervals: [5000] }).toBe(true);
   expect(Math.abs(await clockOffset())).toBeLessThan(60);
 });
+
+// ntpd steps the clock right when the frame gets online, which is when the owner who just set
+// up its network is on the dashboard. A request the step lands in must still be answered.
+test('a request the clock steps forward in is still answered', async () => {
+  const answer = (await onBoard(
+    "( sleep 1; date -s @$(( $(date +%s) + 3600 )) >/dev/null ) & " +
+    "( printf 'GET /api/auth/status HTTP/1.1\\r\\nHost: board\\r\\n'; sleep 3; printf '\\r\\n' ) | nc 127.0.0.1 8080; " +
+    'wait; date -s @$(( $(date +%s) - 3600 )) >/dev/null',
+  )).toString();
+  expect(answer).toMatch(/^HTTP\/1\.1 200/);
+});

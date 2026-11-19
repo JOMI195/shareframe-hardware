@@ -201,12 +201,13 @@ them:
   rolls back, a real install that is committed and survives a reboot, a release whose
   migration deletes the Wi-Fi config (update-verify restores it, the update commits).
 - `clock`: NTP corrects a wrong clock and saves it; a boot without network starts from the
-  saved time and the apps still come up.
+  saved time and the apps still come up; a request the clock steps forward in is answered.
 - `board`: a power cut (counted unclean), a remote reboot (clean, rate-limited), the
   services page against real s6, the support package, the hotspot password a phone needs,
   `/data` grown to the end of the card on the first boot only.
-- `factory-reset`: the admin's reset wipes the owner's pictures and passwords, the frame
-  keeps its identity and its factory network.
+- `factory-reset`: the admin's reset wipes the owner's pictures (files too), passwords and
+  networks and the ssh host key, the frame keeps its identity and its factory network; a
+  power cut before or in the middle of the format still ends in the factory state.
 - `resources`: a process eating all memory is killed by earlyoom, not the kernel; the
   dashboard and the heartbeat show it, the board's services keep running.
 - `safe-mode`: power cuts in a row and a crashing display keep the display down, the
