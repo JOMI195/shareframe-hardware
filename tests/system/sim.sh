@@ -64,11 +64,24 @@ connected() { [ "$(bssh cat /run/shareframe/wifi-mode 2>/dev/null)" = connected 
 
 # The routers and the phone live in the guest, so every boot needs them again. When the
 # board's first scan beat them and it opened the hotspot, ask it to retry like the dashboard does.
+# take <name>: consume the specs' requests $RUN/<name>.<unique>; true when there was one. Each
+# request has its own name: one reusing the name of an earlier, consumed request went missing
+# between the runner container and the host.
+take() {
+	local f found=1
+	for f in "$RUN/$1" "$RUN/$1".*; do
+		[ -e "$f" ] || continue
+		rm -f "$f"
+		found=0
+	done
+	return "$found"
+}
+
 bring_up_world() {
 	wait_for 300 "ssh on the board" bssh true
 	local args=()
 	# One boot without the uplink: set by the specs through $RUN/uplink-down.
-	if [ -f "$RUN/uplink-down" ]; then rm -f "$RUN/uplink-down"; args=(--uplink-down); fi
+	if take uplink-down; then args=(--uplink-down); fi
 	bssh /usr/libexec/sim/world init "${args[@]}"
 	local deadline=$((SECONDS + 120)) mode
 	while [ $SECONDS -lt $deadline ]; do
@@ -159,9 +172,8 @@ firmware() {
 		done
 
 		append="$(tr -d '\r\n' < "$RUN/boot/cmdline.txt") $SIM_ARGS"
-		if [ "$tryboot" = 1 ] && [ -f "$RUN/break-trial" ]; then
+		if [ "$tryboot" = 1 ] && take break-trial; then
 			append="$append rdinit=/sim-broken-trial"
-			rm -f "$RUN/break-trial"
 		fi
 		n=$((n + 1))
 		echo "$(date -Is) boot $n slot=$prefix from=$cfg" >> "$RUN/boots.log"
@@ -182,14 +194,14 @@ firmware() {
 		( bring_up_world && echo "$(date -Is) world up after boot $n" ) >> "$RUN/firmware.log" 2>&1 &
 		# Without the BCM2835 watchdog the kernel cannot reset the SoC and halts instead.
 		while kill -0 "$qpid" 2>/dev/null; do
+			echo "$(date +%s) qemu=$qpid boot=$n" > "$RUN/firmware.beat"
 			if [ -f "$RUN/stop" ] || grep -aqE "Reboot failed -- System halted|reboot: Power down" "$RUN/serial.log" 2>/dev/null; then
 				sleep 0.5
 				kill "$qpid" 2>/dev/null || true
 			fi
 			# The plug pulled: no shutdown in the guest. QEMU itself quits cleanly, so the card keeps
 			# what was written to it (a SIGKILL would drop the qcow2 metadata QEMU still holds).
-			if [ -f "$RUN/power-cut" ]; then
-				rm -f "$RUN/power-cut"
+			if take power-cut; then
 				echo "$(date -Is) power cut" >> "$RUN/boots.log"
 				printf '{"execute":"qmp_capabilities"}\n{"execute":"quit"}\n' \
 					| socat - "UNIX-CONNECT:$RUN/qmp.sock" >/dev/null 2>&1 || kill "$qpid" 2>/dev/null || true

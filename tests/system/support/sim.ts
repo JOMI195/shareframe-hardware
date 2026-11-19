@@ -71,9 +71,16 @@ export async function boots(): Promise<string[]> {
   return log.split('\n').map((l) => l.replace(/^\S+ /, '')).filter((l) => /^boot \d+ /.test(l));
 }
 
+/** A request to the firmware stand-in, under a name of its own (see `take` in sim.sh). */
+async function request(name: string) {
+  const file = `${SIM_RUN}/${name}.${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await writeFile(file, '');
+  return file;
+}
+
 /** Makes the next trial boot panic, like a release that does not come up. */
 export async function breakNextTrial() {
-  await writeFile(`${SIM_RUN}/break-trial`, '');
+  await request('break-trial');
 }
 
 /** Waits until the board answers on ssh and sim.sh has put its routers back after the boot. */
@@ -89,9 +96,16 @@ export async function waitForBoard(timeout = 10 * 60_000) {
 export async function powerCut() {
   const cuts = async () => ((await readFile(`${SIM_RUN}/boots.log`, 'utf8').catch(() => '')).match(/ power cut$/gm) ?? []).length;
   const before = await cuts();
-  await writeFile(`${SIM_RUN}/power-cut`, '');
-  await expect.poll(cuts, { message: 'the firmware stand-in took the power cut', timeout: 15_000, intervals: [200] })
-    .toBe(before + 1);
+  const file = await request('power-cut');
+  try {
+    await expect.poll(cuts, { timeout: 15_000, intervals: [200] }).toBe(before + 1);
+    return;
+  } catch {
+    // reported below
+  }
+  const beat = (await readFile(`${SIM_RUN}/firmware.beat`, 'utf8').catch(() => 'none')).trim();
+  const left = await readFile(file).then(() => 'still there', () => 'gone');
+  throw new Error(`the firmware stand-in did not take ${file}: its last beat ${beat}, now ${Math.round(Date.now() / 1000)}, request ${left}`);
 }
 
 /** One key of shareframe-sysinfo on the board. */
@@ -121,7 +135,7 @@ export async function rebootCleanly() {
 
 /** The next boot comes up without the uplink: no router, no internet, no NTP, until `world uplink up`. */
 export async function offlineNextBoot() {
-  await writeFile(`${SIM_RUN}/uplink-down`, '');
+  await request('uplink-down');
 }
 
 /** Seconds the board's clock is ahead of the runner's (negative: behind). */
