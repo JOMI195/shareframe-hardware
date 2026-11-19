@@ -2,6 +2,8 @@
 # Boot record. umount-data leaves clean-shutdown behind on an orderly stop; its
 # absence means power loss, watchdog or panic. The first boot has no marker yet.
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 D="${DATA_DIR:-/data/shareframe}"
 RUN_DIR="${RUN_DIR:-/run/shareframe}"
 P="${PSTORE:-/sys/fs/pstore}"
@@ -16,7 +18,7 @@ else
 	mkdir -p "$RUN_DIR" && : > "$RUN_DIR/unclean-boot"
 	n=$(cat "$D/unclean_resets" 2>/dev/null || echo 0)
 	case "$n" in ''|*[!0-9]*) n=0 ;; esac
-	echo "$((n + 1))" > "$D/unclean_resets.tmp" && mv "$D/unclean_resets.tmp" "$D/unclean_resets"
+	write_durable "$D/unclean_resets" "$((n + 1))"
 fi
 rm -f "$D/clean-shutdown"
 

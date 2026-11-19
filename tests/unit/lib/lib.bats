@@ -32,3 +32,12 @@ lines" 'ünï "q" \\' ''; do
 	CPUINFO="$SRC/tests/support/fixtures/cpuinfo-pi0w"
 	assert_equal "$(board_name)" shareframe-board-C3D4
 }
+
+@test "write_durable: the value replaces the file whole and is synced, no temp file left" {
+	sync_records "$T/counter"
+	echo 1 > "$T/counter"
+	write_durable "$T/counter" 2
+	assert_equal "$(cat "$T/counter")" 2
+	synced 2
+	assert_file_not_exists "$T/counter.tmp"
+}

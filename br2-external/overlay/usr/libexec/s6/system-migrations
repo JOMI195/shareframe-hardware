@@ -2,6 +2,8 @@
 # Run system migrations (idempotent scripts on /data) when the booted image
 # version differs from the last completed run.
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 MIG_DIR="${MIG_DIR:-/usr/share/shareframe/system-migrations}"
 STATE="${STATE:-/data/shareframe/migrations.state}"
 RELEASE="${RELEASE:-/etc/shareframe-release}"
@@ -24,7 +26,7 @@ for m in "$MIG_DIR"/*.sh; do
 	fi
 done
 if [ "$fail" = 0 ]; then
-	echo "$ver" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+	write_durable "$STATE" "$ver"
 else
 	: > "$RUN_DIR/migrations-failed"
 fi

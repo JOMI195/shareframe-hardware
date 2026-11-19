@@ -15,3 +15,7 @@ board_name() {
 	s="$(board_serial)"
 	printf 'shareframe-board-%s\n' "$(printf '%s' "$s" | tail -c 4 | tr 'a-f' 'A-F')"
 }
+
+# write_durable <file> <value>: replace the file whole and push it to the card, so a power
+# cut seconds later cannot take it.
+write_durable() { printf '%s\n' "$2" > "$1.tmp" && mv "$1.tmp" "$1" && sync; }

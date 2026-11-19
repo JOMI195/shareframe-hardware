@@ -3,7 +3,7 @@
 CLOCK_FILE="${CLOCK_FILE:-/data/fake-hwclock}"
 save() {
 	date +%s > "$CLOCK_FILE.tmp" 2>/dev/null && \
-		mv "$CLOCK_FILE.tmp" "$CLOCK_FILE"
+		mv "$CLOCK_FILE.tmp" "$CLOCK_FILE" && sync
 }
 trap 'kill "$sleeper" 2>/dev/null; save; exit 0' TERM
 while true; do

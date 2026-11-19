@@ -31,3 +31,12 @@ setup() {
 	wait $! || true
 	assert_equal "$(cat "$CLOCK_FILE")" 1767323045
 }
+
+@test "a save is on the card before a power cut can take it" {
+	sync_records "$CLOCK_FILE"
+	"$S6/fake-hwclock-save" 3>&- &
+	eventually 3 test -s "$T/synced"
+	kill -TERM $!
+	wait $! || true
+	synced 1767323045
+}

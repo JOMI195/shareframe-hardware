@@ -32,3 +32,9 @@ second"
 	assert_file_exists "$RUN_DIR/migrations-failed"
 	assert_file_not_exists "$STATE"
 }
+
+@test "the migrated version is on the card before a power cut can take it" {
+	sync_records "$STATE"
+	"$S6/system-migrations" >/dev/null
+	synced 2.0.0
+}

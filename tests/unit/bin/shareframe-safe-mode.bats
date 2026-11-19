@@ -91,3 +91,10 @@ boot() { # [clean]
 	assert_equal "$(cat "$RUN_DIR/safe-mode")" remote
 	assert_file_exists "$DATA_DIR/safe-mode-remote"
 }
+
+@test "the reset counter is on the card before a power cut can bring the old streak back" {
+	for _ in 1 2 3 4 5; do boot; done
+	sync_records "$DATA_DIR/short_boots"
+	shareframe-safe-mode exit >/dev/null
+	synced 0
+}

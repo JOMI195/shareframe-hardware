@@ -50,3 +50,11 @@ meta() { printf '{"from_version":"%s","to_version":"%s"}\n' "$1" "$2" > "$META";
 	shareframe-update-history install-failed 'rauc: "bad signature"'
 	assert_golden update-history.jsonl "$HIST"
 }
+
+@test "an outcome is on the card before the reboot that follows it" {
+	meta 1.0.0 1.1.0
+	sync_records "$HIST"
+	shareframe-update-history committed
+	run grep -c '"result":"committed"' "$T/synced"
+	assert_output 1
+}

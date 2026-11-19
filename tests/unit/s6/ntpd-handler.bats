@@ -19,3 +19,9 @@ setup() {
 	"$S6/ntpd-handler" unsync
 	assert_file_not_exists "$STATE"
 }
+
+@test "the time a step set is on the card before a power cut can take it" {
+	sync_records "$CLOCK_FILE"
+	"$S6/ntpd-handler" step
+	synced 1767323045
+}

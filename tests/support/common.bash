@@ -40,6 +40,10 @@ quiet_stub() {
 	chmod +x "$STUBS/$1"
 }
 
+# sync_records <file>: a `sync` on PATH that appends what <file> holds at that moment to $T/synced.
+sync_records() { quiet_stub sync "cat '$1' >> '$T/synced' 2>/dev/null || echo none >> '$T/synced'"; }
+synced() { grep -qx -- "$1" "$T/synced" 2>/dev/null || fail "'$1' never reached the card; synced: $(cat "$T/synced" 2>/dev/null)"; }
+
 called() { grep -qs -- "^$1" "$CALLS"; }
 assert_called() { called "$1" || fail "no call starting with '$1'; calls: $(cat "$CALLS" 2>/dev/null)"; }
 refute_called() { ! called "$1" || fail "unexpected call starting with '$1'"; }

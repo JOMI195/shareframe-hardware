@@ -33,3 +33,9 @@ finish() { "$S6/service-finish" shareframe-display "$@"; }
 	finish 1
 	assert_file_not_exists "$CALLS"
 }
+
+@test "a crash is on the card before a power cut can take it" {
+	sync_records "$T/crash_count"
+	run finish 139
+	synced 1
+}

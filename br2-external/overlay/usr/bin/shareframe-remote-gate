@@ -3,6 +3,8 @@
 #   check [--no-rate-limit]  exit 1 with the reason on stdout when the board must not reboot now
 #   mark                     record a remote reboot for the rate limit
 set -u
+# shellcheck source=br2-external/overlay/usr/lib/shareframe/lib.sh
+. "${SF_LIB:-/usr/lib/shareframe/lib.sh}"
 DATA_DIR="${DATA_DIR:-/data/shareframe}"
 MARK="$DATA_DIR/remote-reboot-at"
 MIN_GAP="${MIN_GAP:-1800}"
@@ -26,7 +28,7 @@ check)
 	;;
 mark)
 	mkdir -p "$DATA_DIR"
-	date +%s > "$MARK.tmp" && mv "$MARK.tmp" "$MARK"
+	write_durable "$MARK" "$(date +%s)"
 	;;
 *)
 	echo "usage: shareframe-remote-gate check [--no-rate-limit]|mark" >&2

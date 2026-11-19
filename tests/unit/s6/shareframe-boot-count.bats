@@ -11,3 +11,9 @@ setup() { sf_setup; export DATA_DIR="$T"; }
 	sh "$S6/shareframe-boot-count"
 	assert_equal "$(cat "$T/boot_count")" 1
 }
+
+@test "the count is on the card before a power cut can take it" {
+	sync_records "$T/boot_count"
+	sh "$S6/shareframe-boot-count"
+	synced 1
+}

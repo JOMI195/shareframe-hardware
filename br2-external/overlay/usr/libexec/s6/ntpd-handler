@@ -8,7 +8,7 @@ case "$1" in
     step)
         touch "$STATE"
         # fake-hwclock-save only saves hourly; a short-lived boot would keep restoring the stale time.
-        date +%s > "$CLOCK_FILE.ntp" 2>/dev/null && mv "$CLOCK_FILE.ntp" "$CLOCK_FILE"
+        date +%s > "$CLOCK_FILE.ntp" 2>/dev/null && mv "$CLOCK_FILE.ntp" "$CLOCK_FILE" && sync
         echo "ntpd: synced" > "$CONSOLE"
         ;;
     stratum|periodic)

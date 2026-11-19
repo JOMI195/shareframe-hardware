@@ -40,3 +40,10 @@ setup() {
 	run shareframe-remote-gate check
 	assert_success
 }
+
+@test "the reboot mark is on the card before the reboot it allows" {
+	mkdir -p "$DATA_DIR"
+	sync_records "$DATA_DIR/remote-reboot-at"
+	shareframe-remote-gate mark
+	synced 10000
+}

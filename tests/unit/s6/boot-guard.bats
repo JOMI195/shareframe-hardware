@@ -64,3 +64,11 @@ streak() { [ "$(cat "$DATA_DIR/short_boots")" = "$1" ]; }
 	eventually 3 streak 0
 	assert_file_not_exists "$DATA_DIR/safe-mode-cleared"
 }
+
+@test "each short boot is on the card before the next power cut can take it" {
+	sync_records "$DATA_DIR/short_boots"
+	boot
+	boot
+	synced 1
+	synced 2
+}

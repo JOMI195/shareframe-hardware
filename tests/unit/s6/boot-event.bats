@@ -46,3 +46,10 @@ boot() { "$S6/boot-event"; }
 	boot
 	assert_equal "$(cat "$DATA_DIR/unclean_resets")" 1
 }
+
+@test "an unclean boot is on the card before the next power cut can take it" {
+	echo 2 > "$DATA_DIR/unclean_resets"
+	sync_records "$DATA_DIR/unclean_resets"
+	"$S6/boot-event" >/dev/null 2>&1
+	synced 3
+}
