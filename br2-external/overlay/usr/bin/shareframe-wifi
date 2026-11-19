@@ -32,7 +32,8 @@ wpa_ok() {
 # wins over an id, so a network named "5" is never mistaken for network 5.
 find_id() {
 	id="$(${WPA} list_networks 2>/dev/null \
-		| SSID="$1" awk -F'\t' 'NR>1 && $2==ENVIRON["SSID"] { print $1; exit }')"
+		| SSID="$1" LISTED="$(shown "$(to_hex "$1")")" \
+			awk -F'\t' 'NR>1 && ($2==ENVIRON["SSID"] || $2==ENVIRON["LISTED"]) { print $1; exit }')"
 	if [ -z "$id" ]; then
 		case "$1" in ''|*[!0-9]*) ;; *) id="$1" ;; esac
 	fi

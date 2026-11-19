@@ -89,6 +89,17 @@ office"
 	assert_called 'wpa_cli -i wlan0 save_config'
 }
 
+# The dashboard shows the real name and sends it back; wpa_cli lists it escaped.
+@test "online del and mod find a network by its real name as well as by its listed one" {
+	online "$(printf '0\thome')" "$(printf '1\tCaf\\xc3\\xa9 Wi-Fi')"
+	shareframe-wifi del 'Café Wi-Fi'
+	assert_called 'wpa_cli -i wlan0 remove_network 1'
+	shareframe-wifi mod 'Café Wi-Fi' new-password-1 >/dev/null
+	assert_called 'wpa_cli -i wlan0 set_network 1 psk'
+	shareframe-wifi del 'Caf\xc3\xa9 Wi-Fi'
+	[ "$(grep -c 'remove_network 1' "$CALLS")" = 2 ] || fail "listed name not found"
+}
+
 @test "a password wpa_passphrase rejects saves nothing" {
 	quiet_stub wpa_passphrase 'echo "Passphrase must be 8..63 characters"; exit 1'
 	before="$(cat "$WPA_CONF")"
