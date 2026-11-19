@@ -28,6 +28,7 @@ SERVER_NAME=shareframe-sim-fake-server
 RUNNER_IMAGE=shareframe-sim-runner
 BASE_VERSION="${SIM_BASE_VERSION:-1.0.0}"
 UPDATE_VERSION="${SIM_UPDATE_VERSION:-1.0.1}"
+MIGRATION_VERSION="${SIM_MIGRATION_VERSION:-1.0.2}"
 SIM_ARGS="initcall_blacklist=bcm2835_power_driver_init,bcm2835_wdt_driver_init mac80211_hwsim.radios=4"
 
 die() { echo "sim: $*" >&2; exit 1; }
@@ -99,11 +100,17 @@ prepare_config() {
 	install -m 600 "$CACHE/secrets.toml" "$CONFIG/factory/.env.secrets.toml"
 }
 
-build_image() { # <version>
+build_image() { # <version> [--with-migration]
 	local version="$1" log="$CACHE/build-$1.log"
 	mkdir -p "$CACHE"
 	rm -rf "${BUILDS:?}/sim-$version"
 	prepare_config
+	# Buildroot keeps overlay files in its target from earlier builds; only this build may carry it.
+	rm -f "$BR/output/target/usr/share/shareframe/system-migrations/990-sim-break-data.sh"
+	if [ "${2:-}" = --with-migration ]; then
+		install -D -m 755 "$HW/tests/system/fixtures/990-sim-break-data.sh" \
+			"$CONFIG/overlay/usr/share/shareframe/system-migrations/990-sim-break-data.sh"
+	fi
 	log "building sim $version (log: $log)"
 	(cd "$HW" && SHAREFRAME_BR_DIR="$BR" SHAREFRAME_ARTIFACTS_DIR="$BUILDS" \
 		./automation.sh build "$CONFIG" --version "$version") > "$log" 2>&1 \
@@ -388,13 +395,29 @@ cmd_server() {
 cmd_update() {
 	case "${1:-}" in
 		bundle)
-			local v="${2:?bundle <version>}"
-			build_image "$v"
-			SHAREFRAME_BR_DIR="$BR" "$HW/scripts/make-release.sh" --mode dev --from "$BUILDS/sim-$v" > "$CACHE/release-$v.log" 2>&1 \
-				|| { tail -n 20 "$CACHE/release-$v.log" >&2; die "bundle failed"; }
+			local v="${2:?bundle <version> [--foreign-key | --with-migration]}" opt="${3:-}" name="shareframe-$2"
+			local signer=()
+			case "$opt" in
+				--foreign-key)
+					# A key the board's keyring has never seen, made here and never kept in git.
+					local fk="$CACHE/foreign"
+					if [ ! -f "$fk/key.pem" ]; then
+						mkdir -p "$fk"
+						openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=not-shareframe \
+							-keyout "$fk/key.pem" -out "$fk/cert.pem" >/dev/null 2>&1 || die "foreign key failed"
+					fi
+					signer=(SHAREFRAME_RELEASE_CERT="$fk/cert.pem" SHAREFRAME_RELEASE_KEY="$fk/key.pem")
+					name="$name-foreign"
+					[ -d "$BUILDS/sim-$v" ] || build_image "$v" ;;
+				--with-migration) build_image "$v" --with-migration ;;
+				'') build_image "$v" ;;
+				*) die "bundle: unknown option $opt" ;;
+			esac
+			env "${signer[@]}" SHAREFRAME_BR_DIR="$BR" "$HW/scripts/make-release.sh" --mode dev --from "$BUILDS/sim-$v" \
+				> "$CACHE/release-$v.log" 2>&1 || { tail -n 20 "$CACHE/release-$v.log" >&2; die "bundle failed"; }
 			mkdir -p "$BUNDLES"
-			cp "$BUILDS/sim-$v/releases/shareframe-$v-dev.raucb" "$BUNDLES/shareframe-$v.raucb"
-			echo "$BUNDLES/shareframe-$v.raucb" ;;
+			cp "$BUILDS/sim-$v/releases/shareframe-$v-dev.raucb" "$BUNDLES/$name.raucb"
+			echo "$BUNDLES/$name.raucb" ;;
 		offer)
 			local v="${2:?offer <version> [--corrupt] [--criticality C] [--notes TEXT]}" corrupt=false crit=Minor notes="Simulator release $2"
 			shift 2
@@ -418,7 +441,7 @@ cmd_update() {
 			running || die "not up"
 			touch "$RUN/power-cut"
 			echo "the board loses power and boots again" ;;
-		*) die "update bundle <version> | offer <version> [--corrupt] [--criticality C] [--notes TEXT] | break-trial | power-cut" ;;
+		*) die "update bundle <version> [--foreign-key | --with-migration] | offer <version> [--corrupt] [--criticality C] [--notes TEXT] | break-trial | power-cut" ;;
 	esac
 }
 
@@ -444,13 +467,15 @@ cmd_check() {
 cmd_test() {
 	running || die "not up"
 	[ -f "$BUNDLES/shareframe-$UPDATE_VERSION.raucb" ] || cmd_update bundle "$UPDATE_VERSION" >/dev/null
+	[ -f "$BUNDLES/shareframe-$UPDATE_VERSION-foreign.raucb" ] || cmd_update bundle "$UPDATE_VERSION" --foreign-key >/dev/null
+	[ -f "$BUNDLES/shareframe-$MIGRATION_VERSION.raucb" ] || cmd_update bundle "$MIGRATION_VERSION" --with-migration >/dev/null
 	local host=127.0.0.1 net=(--network host)
 	if docker info --format '{{.OperatingSystem}}' 2>/dev/null | grep -q 'Docker Desktop'; then
 		host=host.docker.internal net=()
 	fi
 	rm -rf "$CACHE/report" && mkdir -p "$CACHE/report"
 	local status=0
-	runner "${net[@]}" -e SIM_UPDATE_VERSION="$UPDATE_VERSION" \
+	runner "${net[@]}" -e SIM_UPDATE_VERSION="$UPDATE_VERSION" -e SIM_MIGRATION_VERSION="$MIGRATION_VERSION" \
 		-e E2E_BASE_URL="http://$host:$HTTP_PORT" -e FAKE_SERVER_URL="http://$host:$SERVER_PORT" \
 		-e PANEL_DIR=/run/shareframe/panel -e E2E_REPORT_DIR=/report/html -e E2E_RESULTS_DIR=/report/results \
 		-e BOARD_SSH="-i /simrun/id_ed25519 -p $SSH_PORT -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR -o BatchMode=yes -o ConnectTimeout=30 -o ControlMaster=auto -o ControlPath=/tmp/sim-%C -o ControlPersist=300 root@$host" \

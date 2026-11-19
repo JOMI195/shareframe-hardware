@@ -137,7 +137,7 @@ tests/system/sim.sh down         # stops everything and deletes the run state
 | Piece | How |
 |---|---|
 | Board Wi-Fi `wlan0` | hwsim radio 0; the real s6 Wi-Fi stack owns it |
-| Router `home` / `office` | netns `world` on the board: hwsim radios 1 and 2 run hostapd, bridged onto QEMU's user-mode uplink. DHCP and internet come from QEMU (10.0.2.0/24), the fake server is `10.0.2.2:9000` |
+| Router `home` / `office` | netns `world` on the board: hwsim radios 1 and 2 run hostapd, bridged onto QEMU's user-mode uplink. DHCP and internet come from QEMU (10.0.2.0/24), the fake server is `10.0.2.2:9000`. The host needs internet: the board pings 1.1.1.1 and syncs from pool.ntp.org |
 | Phone | netns `phone`: hwsim radio 3, joins the board's hotspot |
 | USB link `usb0` | `10.55.0.1`, as on real hardware, with no default route, so it never hides a Wi-Fi state. Host ports `127.0.0.1:2222` (ssh) and `:8090` (dashboard) |
 | Fake server | shareframe-board's `tests/e2e/fake-server` as container `shareframe-sim-fake-server` on `127.0.0.1:9000` |
@@ -164,6 +164,8 @@ display, hwsim and bridge in the kernel, iproute2). The firmware stand-in adds
 | `wifi status` | `wifi-mode.json` and the world |
 | `server ...` | `picture [file] [expires]`, `remove <id>...`, `clear`, `send <json>`, `garbage`, `outage on\|off`, `unregistered on\|off`, `disconnect [code]`, `state`, `reset` |
 | `update bundle <version>` | builds the image at that version and signs a dev bundle into the cache |
+| `update bundle <version> --foreign-key` | the same build signed with a key made in the cache, which the board does not trust |
+| `update bundle <version> --with-migration` | an image carrying `fixtures/990-sim-break-data.sh`, a migration that deletes what `/data/shareframe/sim-break` names, once (only this build has it) |
 | `update offer <version> [--corrupt] [--criticality C]` | the fake server offers it; install from the dashboard or `POST /api/system/updates/perform-update` |
 | `update break-trial` | the next trial boot panics, so the update rolls back |
 | `update power-cut` | pulls the plug: QEMU dies without a shutdown and the board boots again |
@@ -195,8 +197,11 @@ them:
 
 - `network`: the saved network, the hotspot and a phone setting up a new one, roaming, a
   changed router password, an internet outage.
-- `update`: a corrupt bundle, a trial boot that fails and rolls back, a real install that is
-  committed and survives a reboot.
+- `update`: a corrupt bundle, one signed with a foreign key, a trial boot that fails and
+  rolls back, a real install that is committed and survives a reboot, a release whose
+  migration deletes the Wi-Fi config (update-verify restores it, the update commits).
+- `clock`: NTP corrects a wrong clock and saves it; a boot without network starts from the
+  saved time and the apps still come up.
 - `board`: a power cut (counted unclean), a remote reboot (clean, rate-limited), the
   services page against real s6, the support package, the hotspot password a phone needs,
   `/data` grown to the end of the card on the first boot only.
@@ -208,7 +213,8 @@ them:
   heartbeat tells the admin why, a clean boot lifts it.
 
 `support/sim.ts` has `world()`, `waitForWifi()`, slots, `boots()`, `breakNextTrial()`,
-`powerCut()`, `rebootCleanly()`, `sysinfo()`, `lastBootRecord()` and `consoleLog()`. Everything else comes from shareframe-board's `tests/e2e/support`
+`powerCut()`, `rebootCleanly()`, `offlineNextBoot()`, `clockOffset()`, `sysinfo()`, `lastBootRecord()` and
+`consoleLog()`. Everything else comes from shareframe-board's `tests/e2e/support`
 through `@board/*`: `FakeServer`, `BoardApi`, `signIn`, the panel helpers. The runner mounts
 both repos side by side under `/w` with one `node_modules` from the board repo's lockfile,
 so the Playwright version is the board's. The panel is read over ssh (`BOARD_SSH`). There

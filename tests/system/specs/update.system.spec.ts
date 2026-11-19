@@ -7,6 +7,10 @@ import {
 // A real bundle from `tests/system/sim.sh update bundle <version>`; `sim.sh test` builds it when missing.
 const VERSION = process.env.SIM_UPDATE_VERSION ?? '1.0.1';
 const BUNDLE = `shareframe-${VERSION}.raucb`;
+// The same release signed with a key the board does not trust (`sim.sh update bundle <v> --foreign-key`).
+const FOREIGN = `shareframe-${VERSION}-foreign.raucb`;
+// A later release carrying tests/system/fixtures/990-sim-break-data.sh (`--with-migration`).
+const BROKEN = process.env.SIM_MIGRATION_VERSION ?? '1.0.2';
 
 // The corrupt bundle and the rollback run first: both leave the frame on its old release, ready
 // for the real install.
@@ -17,9 +21,10 @@ test.beforeEach(async ({ request }) => {
   await waitForWifi(request, { mode: 'connected', internet: true });
 });
 
-async function install(board: import('@board/board').BoardApi, server: import('@board/board').FakeServer) {
+async function install(board: import('@board/board').BoardApi, server: import('@board/board').FakeServer,
+  version = VERSION) {
   await server.waitForFrame();
-  await server.offerRelease({ version: VERSION, bundleFile: BUNDLE });
+  await server.offerRelease({ version, bundleFile: `shareframe-${version}.raucb` });
   const trialBoots = (await boots()).filter((b) => b.includes('from=tryboot.txt')).length;
   await board.post('/api/system/updates/perform-update');
   await expect
@@ -39,6 +44,26 @@ test('a bundle that is not what the server announced is never installed', async 
   await expect
     .poll(async () => (await board.get('/api/system/updates/status')).phase, { message: 'update failed', timeout: 15 * 60_000, intervals: [5000] })
     .toBe('failed');
+  expect((await board.get('/api/system/updates/history')).history[0]).toMatchObject({ result: 'install-failed' });
+  expect((await boots()).length).toBe(before);
+  expect(await installedVersion()).toBe(version);
+  expect(await pendingSlot()).toBe('');
+  await onBoard('s6-svc -r /run/service/shareframe-update');
+});
+
+test('a bundle signed by someone else is refused', async ({ board, server }) => {
+  await server.waitForFrame();
+  const before = (await boots()).length;
+  const version = await installedVersion();
+  await server.offerRelease({ version: VERSION, bundleFile: FOREIGN });
+  await board.post('/api/system/updates/perform-update');
+
+  await expect
+    .poll(async () => (await board.get('/api/system/updates/status')).phase, { message: 'update failed', timeout: 15 * 60_000, intervals: [5000] })
+    .toBe('failed');
+  const { error } = await board.get('/api/system/updates/status');
+  expect(error).toMatch(/rauc install failed/);
+  expect(error).toMatch(/signature|certificate|verif/i);
   expect((await board.get('/api/system/updates/history')).history[0]).toMatchObject({ result: 'install-failed' });
   expect((await boots()).length).toBe(before);
   expect(await installedVersion()).toBe(version);
@@ -86,4 +111,23 @@ test('a release installs into the other slot, boots once on trial and is committ
   await signIn(page);
   await page.goto('/updates/');
   await expect(page.getByText(VERSION).first()).toBeVisible();
+});
+
+// /data is shared by both slots and only the new release migrates it. update-verify backs up
+// what the frame cannot do without before the install and restores it in the commit gate.
+test('a release whose migration drops the Wi-Fi config is committed with the owner\'s networks back', async ({ board, server }) => {
+  await onBoard('shareframe-wifi add office office-pass-123 >/dev/null');
+  expect((await board.get('/api/connection/saved-networks')).networks).toEqual(['home', 'office']);
+  await onBoard('echo wifi > /data/shareframe/sim-break');
+  const other = (await bootedSlot()) === 'A' ? 'B' : 'A';
+
+  await install(board, server, BROKEN);
+  await waitForBoard();
+  expect(await bootedSlot()).toBe(other);
+  await expect.poll(pendingSlot, { message: 'committed', timeout: 10 * 60_000 }).toBe('');
+  expect(await installedVersion()).toBe(BROKEN);
+  expect(JSON.parse((await onBoard('cat /data/shareframe/update-verify/last.json')).toString()))
+    .toMatchObject({ wpa_supplicant: 'restored', result: 'ok', to_version: BROKEN });
+  expect((await onBoard('shareframe-wifi list')).toString()).toContain('office');
+  await onBoard('shareframe-wifi del office >/dev/null');
 });
