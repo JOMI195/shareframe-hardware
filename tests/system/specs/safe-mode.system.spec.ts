@@ -20,8 +20,6 @@ const displayPid = async () => Number((await onBoard(`s6-svstat -o pid ${DISPLAY
 test('power cuts in a row put the display into safe mode until a clean boot', async ({ server }) => {
   for (let i = 1; i <= 5; i++) {
     const n = (await boots()).length;
-    // A brownout loop resets once per slideshow interval, long after the counter reached the card.
-    await onBoard('sync');
     await powerCut();
     await expect.poll(async () => (await boots()).length, { message: `power cut ${i}`, timeout: 5 * 60_000, intervals: [3000] })
       .toBe(n + 1);

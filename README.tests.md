@@ -203,7 +203,8 @@ them:
   them before anything reads `/data`, the update commits, nothing is lost).
 - `clock`: NTP corrects a wrong clock and saves it; a boot without network starts from the
   saved time and the apps still come up; a request the clock steps forward in is answered.
-- `board`: a power cut (counted unclean), a remote reboot (clean, rate-limited), the
+- `board`: a power cut (counted unclean), a crash counted right before a power cut that is
+  still counted after it, a remote reboot (clean, rate-limited), the
   services page against real s6, the support package, the hotspot password a phone needs,
   `/data` grown to the end of the card on the first boot only.
 - `factory-reset`: the admin's reset wipes the owner's pictures (files too), passwords and

@@ -18,9 +18,6 @@ const bootCount = async () => (await boots()).length;
 test('a power cut is an unclean boot: counted, and the board comes back to its network', async ({ request }) => {
   const before = Number(await sysinfo('unclean_resets'));
   const n = await bootCount();
-  // A board that has been up a while has its counters on the card; seconds after a write
-  // they still sit in the page cache and a power cut takes them along.
-  await onBoard('sync');
   await powerCut();
   await expect.poll(bootCount, { message: 'booted again', timeout: 5 * 60_000, intervals: [3000] }).toBe(n + 1);
   await waitForBoard();
@@ -87,4 +84,14 @@ test('the data partition reaches the end of the card on the first boot, and grow
   expect(gap).toBeLessThan(32768);
   await rebootCleanly();
   expect((await consoleLog()).match(/expand-data: growing/g)).toHaveLength(1);
+});
+
+test('a crash counted right before a power cut is still counted', async () => {
+  const before = Number(await sysinfo('crash_count') || 0);
+  await onBoard('/usr/libexec/s6/service-finish shareframe-display 1 0 >/dev/null 2>&1 || true');
+  const n = await bootCount();
+  await powerCut();
+  await expect.poll(bootCount, { message: 'booted again', timeout: 5 * 60_000, intervals: [3000] }).toBe(n + 1);
+  await waitForBoard();
+  expect(Number(await sysinfo('crash_count'))).toBe(before + 1);
 });

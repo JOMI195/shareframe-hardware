@@ -27,7 +27,7 @@ test('NTP corrects a wrong clock and saves it to the card', async () => {
 });
 
 test('a boot without network starts from the saved clock, and NTP takes over once it is back', async ({ request }) => {
-  await onBoard('date +%s > /data/fake-hwclock && sync');
+  await onBoard('/usr/libexec/s6/ntpd-handler step');
   const saved = await num('cat /data/fake-hwclock');
   const built = await num('cat /etc/fake-hwclock-default');
   const n = (await boots()).length;

@@ -85,9 +85,13 @@ export async function waitForBoard(timeout = 10 * 60_000) {
     .toBe(true);
 }
 
-/** Pulls the plug: QEMU dies without a shutdown and the firmware stand-in boots again. */
+/** Pulls the plug: QEMU quits without a shutdown in the guest and the firmware stand-in boots again. */
 export async function powerCut() {
+  const cuts = async () => ((await readFile(`${SIM_RUN}/boots.log`, 'utf8').catch(() => '')).match(/ power cut$/gm) ?? []).length;
+  const before = await cuts();
   await writeFile(`${SIM_RUN}/power-cut`, '');
+  await expect.poll(cuts, { message: 'the firmware stand-in took the power cut', timeout: 15_000, intervals: [200] })
+    .toBe(before + 1);
 }
 
 /** One key of shareframe-sysinfo on the board. */
