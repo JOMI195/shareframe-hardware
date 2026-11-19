@@ -202,6 +202,8 @@ them:
   `/data` grown to the end of the card on the first boot only.
 - `factory-reset`: the admin's reset wipes the owner's pictures and passwords, the frame
   keeps its identity and its factory network.
+- `resources`: a process eating all memory is killed by earlyoom, not the kernel; the
+  dashboard and the heartbeat show it, the board's services keep running.
 - `safe-mode`: power cuts in a row and a crashing display keep the display down, the
   heartbeat tells the admin why, a clean boot lifts it.
 
