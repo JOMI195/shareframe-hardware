@@ -490,7 +490,9 @@ collect() { # <dir>
 	local dir="$1"
 	mkdir -p "$dir"
 	cp "$RUN"/{console.log,serial.log,boots.log,firmware.log} "$dir/" 2>/dev/null || true
-	bssh 'tar -cz -C / var/log run/shareframe/wifi-mode.json data/rauc 2>/dev/null' > "$dir/board-logs.tar.gz" || true
+	# The board's busybox tar has no -z, and it stops at the first path that is missing.
+	bssh 'cd / && tar -c $(for p in var/log run/shareframe/wifi-mode.json data/rauc; do [ -e "$p" ] && echo "$p"; done) | gzip' \
+		> "$dir/board-logs.tar.gz" 2>/dev/null || true
 	curl -fsS "$SERVER/__test/state" | jq 'del(.heartbeats[:-5])' > "$dir/server-state.json" 2>/dev/null || true
 	log "board logs: $dir"
 }
