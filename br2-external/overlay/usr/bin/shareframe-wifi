@@ -1,7 +1,6 @@
 #!/bin/sh
 # shareframe-wifi — CRUD for wpa_supplicant networks on wlan0.
-# Persists across reboots: wpa_supplicant.conf is bind-mounted from
-# /data/wifi/ (see bind-persistent-state oneshot).
+# Persists across reboots: wpa_supplicant reads and saves /data/wifi/wpa_supplicant.conf.
 
 set -eu
 
@@ -81,7 +80,7 @@ conf_block() {
 	done
 }
 
-# rewrite_block <n> drop | psk <hash>: in place, since the conf may be a bind-mount target.
+# rewrite_block <n> drop | psk <hash>: in place, so the file keeps its mode.
 rewrite_block() {
 	tmp="$CONF.tmp"
 	N="$1" OP="$2" HASH="${3:-}" awk '
