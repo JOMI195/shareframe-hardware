@@ -65,7 +65,10 @@ connected() { [ "$(bssh cat /run/shareframe/wifi-mode 2>/dev/null)" = connected 
 # board's first scan beat them and it opened the hotspot, ask it to retry like the dashboard does.
 bring_up_world() {
 	wait_for 300 "ssh on the board" bssh true
-	bssh /usr/libexec/sim/world init
+	local args=()
+	# One boot without the uplink: set by the specs through $RUN/uplink-down.
+	if [ -f "$RUN/uplink-down" ]; then rm -f "$RUN/uplink-down"; args=(--uplink-down); fi
+	bssh /usr/libexec/sim/world init "${args[@]}"
 	local deadline=$((SECONDS + 120)) mode
 	while [ $SECONDS -lt $deadline ]; do
 		mode="$(bssh cat /run/shareframe/wifi-mode 2>/dev/null || true)"

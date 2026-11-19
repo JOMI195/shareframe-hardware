@@ -114,3 +114,13 @@ export async function rebootCleanly() {
     .toBe(n + 1);
   await waitForBoard();
 }
+
+/** The next boot comes up without the uplink: no router, no internet, no NTP, until `world uplink up`. */
+export async function offlineNextBoot() {
+  await writeFile(`${SIM_RUN}/uplink-down`, '');
+}
+
+/** Seconds the board's clock is ahead of the runner's (negative: behind). */
+export async function clockOffset() {
+  return Number((await onBoard('date +%s')).toString().trim()) - Math.round(Date.now() / 1000);
+}

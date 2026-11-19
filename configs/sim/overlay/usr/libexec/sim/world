@@ -3,7 +3,7 @@
 # uplink live in their own netns so the board only reaches them over the air:
 #   world  home + office access points bridged onto the uplink (DHCP, internet)
 #   phone  a client that joins the board's hotspot
-# usage: world init | status
+# usage: world init [--uplink-down] | status
 #        world ap <home|office> up|down|psk <pass>
 #        world uplink up|down
 #        world phone join [ssid pass] | leave | get <path>
@@ -31,6 +31,14 @@ ap_iface() {
 		office) echo wlan2 ;;
 		*) die "unknown network '$1' (home, office)" ;;
 	esac
+}
+
+# QEMU's usb-net holds a received packet until the next one arrives, which stalls the
+# tail of every transfer on an idle link. A steady trickle flushes it.
+uplink_keepalive() {
+	if [ -f "$RUN/keepalive-uplink.pid" ] && kill -0 "$(cat "$RUN/keepalive-uplink.pid")" 2>/dev/null; then return 0; fi
+	$W sh -c 'while :; do ping -q -i 1 10.0.2.2; sleep 1; done' >/dev/null 2>&1 &
+	echo $! > "$RUN/keepalive-uplink.pid"
 }
 
 ap_running() { [ -f "$RUN/$1.pid" ] && kill -0 "$(cat "$RUN/$1.pid")" 2>/dev/null; }
@@ -80,15 +88,12 @@ init() {
 	$W ip link set lo up
 	$W ip link add br0 type bridge
 	$W ip link set "$uplink" master br0
-	$W ip link set "$uplink" up
+	[ "${1:-}" = --uplink-down ] || $W ip link set "$uplink" up
 	$W ip link set br0 up
 	$W ip addr add 10.0.2.250/24 dev br0
 	$P ip link set lo up
 
-	# QEMU's usb-net holds a received packet until the next one arrives, which stalls the
-	# tail of every transfer on an idle link. A steady trickle on both NICs flushes it.
-	$W ping -q -i 1 10.0.2.2 >/dev/null 2>&1 &
-	echo $! > "$RUN/keepalive-uplink.pid"
+	uplink_keepalive
 	ping -q -i 1 10.55.0.2 >/dev/null 2>&1 &
 	echo $! > "$RUN/keepalive-usb.pid"
 
@@ -151,7 +156,7 @@ status() {
 cmd="${1:-}"
 [ "$cmd" = init ] || [ -f "$RUN/ready" ] || die "not initialised (world init)"
 case "$cmd" in
-	init) init ;;
+	init) shift; init "$@" ;;
 	status) status ;;
 	ap)
 		name="${2:-}"; ap_iface "$name" >/dev/null
