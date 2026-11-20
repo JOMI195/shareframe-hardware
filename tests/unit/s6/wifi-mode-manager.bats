@@ -103,34 +103,49 @@ in_hotspot() {
 	[ "$(jq '.at' "$T/run/wifi-scan.json")" -gt 0 ]
 }
 
+# Logs and events end up in diagnostics and on the server; the owner's network names stay on the frame.
+@test "the logs and events never name a network" {
+	export CONSOLE="$T/console"
+	radio assoc linklocal
+	start
+	eventually 10 is mode ap
+	no_radio linklocal
+	radio address internet
+	touch "$T/run/wifi-retry-requested"
+	eventually 10 is mode connected
+	run grep -c home "$T/console" "$CALLS"
+	refute_output --partial ':1'
+	assert_file_exists "$T/console"
+}
+
 # The setup screen and the dashboard tell the owner what to fix.
 @test "a refused password is named when the hotspot comes back" {
 	seen home -40 '[WPA2-PSK-CCMP][ESS]'
 	echo '[TEMP-DISABLED]' > "$T/ctl/flags"
 	start
 	eventually 10 is mode ap
-	assert_equal "$(json last_failed_reason)" wrong_password
+	eventually 10 is json wrong_password last_failed_reason
 }
 
 @test "a saved network out of reach is named" {
 	seen neighbour -40 '[WPA2-PSK-CCMP][ESS]'
 	start
 	eventually 10 is mode ap
-	assert_equal "$(json last_failed_reason)" not_found
+	eventually 10 is json not_found last_failed_reason
 }
 
 @test "a saved network in reach that does not take the frame is named" {
 	seen home -40 '[WPA2-PSK-CCMP][ESS]'
 	start
 	eventually 10 is mode ap
-	assert_equal "$(json last_failed_reason)" not_joined
+	eventually 10 is json not_joined last_failed_reason
 }
 
 @test "a network that hands out no address is named" {
 	radio assoc linklocal
 	start
 	eventually 10 is mode ap
-	assert_equal "$(json last_failed_reason)" no_address
+	eventually 10 is json no_address last_failed_reason
 }
 
 @test "with nothing saved the hotspot stays up, no station retry tears it down" {
@@ -138,7 +153,7 @@ in_hotspot() {
 	export AP_RETRY_EVERY=1
 	start
 	eventually 10 is mode ap
-	assert_equal "$(json last_failed_reason)" no_networks
+	eventually 10 is json no_networks last_failed_reason
 	rm -f "$CALLS"
 	/usr/bin/sleep 1
 	refute_called 'shareframe-ap down'
@@ -215,7 +230,7 @@ in_hotspot() {
 	radio assoc linklocal
 	start
 	eventually 10 is mode ap
-	assert_called 'shareframe-event wifi ap fallback (no address from home)'
+	assert_called 'shareframe-event wifi ap fallback (no address from the network)'
 	failed_recently
 	no_radio linklocal
 	radio address internet

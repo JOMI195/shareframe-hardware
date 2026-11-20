@@ -100,7 +100,8 @@ office"
 	before="$(cat "$WPA_CONF")"
 	run shareframe-wifi del nowhere
 	assert_failure 1
-	assert_output --partial "no network matching 'nowhere'"
+	assert_output --partial "no such network"
+	refute_output --partial nowhere
 	assert_equal "$(cat "$WPA_CONF")" "$before"
 }
 

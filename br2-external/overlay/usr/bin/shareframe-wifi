@@ -22,7 +22,7 @@ wpa_ok() {
 	out="$(${WPA} "$@" 2>&1)" || true
 	case "$out" in
 		OK*) printf '%s\n' "$out" ;;
-		*FAIL*|*"Could not connect"*) die "wpa_cli $* -> $out" ;;
+		*FAIL*|*"Could not connect"*) die "wpa_cli $1 -> $out" ;;
 		*) printf '%s\n' "$out" ;;
 	esac
 }
@@ -106,7 +106,7 @@ rewrite_block() {
 
 psk_hash() { # <ssid> <psk>
 	hash="$(wpa_passphrase "$1" "$2" 2>/dev/null | awk -F= '/^[[:space:]]*psk=/ { print $2; exit }')"
-	[ -n "$hash" ] || die "wpa_passphrase failed for ssid=$1"
+	[ -n "$hash" ] || die "wpa_passphrase refused the password"
 	printf '%s\n' "$hash"
 }
 
@@ -209,7 +209,7 @@ cmd_add() {
 del_offline() {
 	[ -f "$CONF" ] || die "offline del: $CONF missing"
 	n="$(conf_block "$1")"
-	[ -n "$n" ] || die "del: no network matching '$1'"
+	[ -n "$n" ] || die "del: no such network"
 	rewrite_block "$n" drop
 	printf 'removed network (offline) ssid=%s\n' "$1"
 }
@@ -217,7 +217,7 @@ del_offline() {
 mod_offline() {
 	[ -f "$CONF" ] || die "offline mod: $CONF missing"
 	n="$(conf_block "$1")"
-	[ -n "$n" ] || die "mod: no network matching '$1'"
+	[ -n "$n" ] || die "mod: no such network"
 	ssid="$(raw "$(conf_ssids_hex | sed -n "$((n + 1))p")")"
 	hash="$(psk_hash "$ssid" "$2")"
 	rewrite_block "$n" psk "$hash"
@@ -231,7 +231,7 @@ cmd_del() {
 		return 0
 	fi
 	id="$(find_id "$1")"
-	[ -n "$id" ] || die "del: no network matching '$1'"
+	[ -n "$id" ] || die "del: no such network"
 	wpa_ok remove_network "$id" >/dev/null
 	wpa_ok save_config >/dev/null
 	printf 'removed network id=%s\n' "$id"
@@ -244,7 +244,7 @@ cmd_mod() {
 		return 0
 	fi
 	id="$(find_id "$1")"
-	[ -n "$id" ] || die "mod: no network matching '$1'"
+	[ -n "$id" ] || die "mod: no such network"
 
 	# The current ssid, quoted or hex, is the salt of the hash.
 	v="$(${WPA} get_network "$id" ssid)"
@@ -252,7 +252,7 @@ cmd_mod() {
 		\"*\") ssid="${v#\"}"; ssid="${ssid%\"}" ;;
 		*) ssid="$(raw "$v")" ;;
 	esac
-	[ -n "$ssid" ] || die "mod: could not read ssid for id=$id"
+	[ -n "$ssid" ] || die "mod: could not read the ssid of network $id"
 
 	hash="$(psk_hash "$ssid" "$2")"
 	wpa_ok set_network "$id" psk "$hash" >/dev/null

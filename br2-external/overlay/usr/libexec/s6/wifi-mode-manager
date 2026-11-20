@@ -178,13 +178,13 @@ wait_for_sta() {
 		sleep 2; i=$((i + 2))
 	done
 	[ -e "$LEASED_FLAG" ] && return 0
-	FALLBACK_REASON="no address from $(cur_ssid)"
+	FALLBACK_REASON="no address from the network"
 	FAILED_REASON=no_address
 	return 1
 }
 
 enter_connected() {
-	log "mode -> connected (ssid=$(cur_ssid))"
+	log "mode -> connected"
 	LAST_FAILED_AT=0
 	LAST_FAILED_REASON=""
 	if [ ! -e "$JOINED_FLAG" ]; then
