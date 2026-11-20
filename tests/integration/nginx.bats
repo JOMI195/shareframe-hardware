@@ -78,6 +78,28 @@ board() {
 	assert_line 'console.log(1)'
 }
 
+@test "every answer carries the browser's protections" {
+	for url in http://127.0.0.1/network/ http://127.0.0.1/assets/app.js; do
+		run board without-backend -D - "$url"
+		assert_line --partial 'X-Content-Type-Options: nosniff'
+		assert_line --partial 'X-Frame-Options: DENY'
+		assert_line --partial 'Referrer-Policy: no-referrer'
+		assert_line --partial "Content-Security-Policy: default-src 'self'"
+	done
+	run board with-backend -D - http://127.0.0.1/api/system/info
+	assert_line --partial 'X-Content-Type-Options: nosniff'
+}
+
+# A new release replaces index.html in place; the hashed assets never change.
+@test "the page is revalidated on every load, its hashed assets are kept for good" {
+	run board without-backend -D - http://127.0.0.1/network/
+	assert_line --partial 'Cache-Control: no-cache'
+	run board without-backend -D - http://127.0.0.1/assets/app.js
+	assert_line --partial 'Cache-Control: public, max-age=31536000, immutable'
+	run board without-backend -D - http://127.0.0.1/assets/missing.js
+	assert_line --regexp '^404'
+}
+
 @test "/api reaches the backend with its path" {
 	run board with-backend http://127.0.0.1/api/system/info
 	assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
