@@ -16,6 +16,11 @@ setup() {
 		'    def do_GET(self):' \
 		'        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()' \
 		'        self.wfile.write(b"{\"success\":true,\"data\":{\"path\":\"" + self.path.encode() + b"\"}}")' \
+		'    def do_POST(self):' \
+		'        n = int(self.headers["Content-Length"] or 0); self.rfile.read(n)' \
+		'        enc = self.headers.get("Content-Encoding") or "none"' \
+		'        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()' \
+		'        self.wfile.write(("{\"encoding\":\"%s\",\"length\":%d}" % (enc, n)).encode())' \
 		'    def log_message(self, *a): pass' \
 		'http.server.HTTPServer(("127.0.0.1", 8080), H).serve_forever()' > "$T/backend.py"
 	# Like the board's backend: an HTTP/1.1 answer without "Connection: close", one request per
@@ -73,10 +78,44 @@ board() {
 	assert_line 'console.log(1)'
 }
 
+@test "every answer carries the browser's protections" {
+	for url in http://127.0.0.1/network/ http://127.0.0.1/assets/app.js; do
+		run board without-backend -D - "$url"
+		assert_line --partial 'X-Content-Type-Options: nosniff'
+		assert_line --partial 'X-Frame-Options: DENY'
+		assert_line --partial 'Referrer-Policy: no-referrer'
+		assert_line --partial "Content-Security-Policy: default-src 'self'"
+	done
+	run board with-backend -D - http://127.0.0.1/api/system/info
+	assert_line --partial 'X-Content-Type-Options: nosniff'
+}
+
+# A new release replaces index.html in place; the hashed assets never change.
+@test "the page is revalidated on every load, its hashed assets are kept for good" {
+	run board without-backend -D - http://127.0.0.1/network/
+	assert_line --partial 'Cache-Control: no-cache'
+	run board without-backend -D - http://127.0.0.1/assets/app.js
+	assert_line --partial 'Cache-Control: public, max-age=31536000, immutable'
+	run board without-backend -D - http://127.0.0.1/assets/missing.js
+	assert_line --regexp '^404'
+}
+
 @test "/api reaches the backend with its path" {
 	run board with-backend http://127.0.0.1/api/system/info
 	assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
 	assert_line --regexp '^200'
+}
+
+# The backend inflates a gzip request body without a limit; nginx keeps both the size and the encoding away.
+@test "an oversized request body never reaches the backend" {
+	head -c 100000 /dev/zero > "$T/big.bin"
+	run board with-backend -X POST --data-binary @"$T/big.bin" http://127.0.0.1/api/auth/login
+	assert_line --regexp '^413'
+}
+
+@test "a request body's content encoding is not passed to the backend" {
+	run board with-backend -X POST -H Content-Encoding:gzip -d x http://127.0.0.1/api/auth/login
+	assert_line '{"encoding":"none","length":1}'
 }
 
 # A POST is never retried by nginx, so one sent down a connection the backend already dropped is a 502.
@@ -90,6 +129,30 @@ board() {
 	run board without-backend http://127.0.0.1/api/system/info
 	assert_line '{"success":false,"message":"Dashboard service unavailable","data":null}'
 	assert_line --regexp '^502'
+}
+
+# A page on another name that rebinds its DNS to the board must not reach the API; a router's DNS name for
+# the board still finds the dashboard, at the address it came in on.
+@test "only the board's own names reach the dashboard, other names are sent to its address" {
+	for host in evil.example shareframe-board-1a2b.fritz.box; do
+		run board with-backend -H "Host:$host" http://127.0.0.1/api/system/info
+		assert_line "302 http://127.0.0.1/"
+		refute_line --partial '"path"'
+	done
+	for host in shareframe-board-1A2B.local shareframe-board.local localhost 10.55.0.1 127.0.0.1; do
+		run board with-backend -H "Host:$host" http://127.0.0.1/api/system/info
+		assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
+	done
+}
+
+# The simulator's test runner reaches the board under a name of its own.
+@test "a build can add names the board answers to" {
+	run board with-backend -H "Host:host.docker.internal" http://127.0.0.1/api/system/info
+	assert_line "302 http://127.0.0.1/"
+	mkdir -p "$T/nginx/own-hosts.d"
+	echo 'host.docker.internal 1;' > "$T/nginx/own-hosts.d/sim.conf"
+	run board with-backend -H "Host:host.docker.internal" http://127.0.0.1/api/system/info
+	assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
 }
 
 @test "the phones' captive-portal probes open the dashboard" {

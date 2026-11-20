@@ -16,7 +16,14 @@ JSON_FILE="$STATE_DIR/wifi-mode.json"
 RETRY_FLAG="$STATE_DIR/wifi-retry-requested"
 SWITCH_FLAG="$STATE_DIR/wifi-switching"
 LEASED_FLAG="$STATE_DIR/wifi-leased"
+# The networks the last station attempt saw, for the dashboard to offer while the hotspot has the radio.
+SCAN_FILE="$STATE_DIR/wifi-scan.json"
+# Until when the heartbeat's last server contact counts (unix seconds); proves internet where
+# ping is blocked.
+BACKEND_OK="${BACKEND_OK:-/run/shareframe/backend-ok}"
 AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
+# Exists once the frame has joined a wifi; until then the display keeps its setup screen up.
+JOINED_FLAG="${JOINED_FLAG:-/data/shareframe/wifi-joined}"
 WPA_CONF="${WPA_CONF:-/data/wifi/wpa_supplicant.conf}"
 CONSOLE="${CONSOLE:-/dev/console}"
 LOGGER="${LOGGER:-logger}"
@@ -34,6 +41,8 @@ WEDGE_MAX="${WEDGE_MAX:-20}"               # connected: cap on the wedged-link b
 
 # Unix time of the last station attempt that fell back to AP; 0 = none since connecting.
 LAST_FAILED_AT=0
+# Why it fell back: no_networks, wrong_password, not_found, not_joined or no_address.
+LAST_FAILED_REASON=
 
 log() {
 	echo "wifi-mode-manager: $*" > "$CONSOLE"
@@ -52,7 +61,12 @@ ap_creds() {
 have_assoc() { wpa_cli -i "$IFACE" status 2>/dev/null | grep -q '^wpa_state=COMPLETED'; }
 # A self-assigned link-local address is what dhcpcd takes when no lease comes.
 have_ip()    { ip -4 addr show "$IFACE" 2>/dev/null | grep 'inet ' | grep -qv 'inet 169\.254\.'; }
-have_internet() { ping -c1 -W1 1.1.1.1 >/dev/null 2>&1; }
+have_internet() { ping -c1 -W1 1.1.1.1 >/dev/null 2>&1 || backend_fresh; }
+backend_fresh() {
+	valid_until="$(head -n1 "$BACKEND_OK" 2>/dev/null)"
+	case "$valid_until" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$(date +%s)" -lt "$valid_until" ]
+}
 cur_ssid() {
 	# Strip quotes/backslashes so the value is safe to embed in JSON.
 	wpa_cli -i "$IFACE" status 2>/dev/null | sed -n 's/^ssid=//p' | head -1 | tr -d '\\"'
@@ -62,6 +76,45 @@ cur_ssid() {
 known_ssids() {
 	sed -n 's/^[[:space:]]*ssid=//p' "$WPA_CONF" 2>/dev/null \
 		| awk '{ gsub(/["\\[:cntrl:]]/, ""); printf "%s\"%s\"", (NR > 1 ? "," : ""), $0 }'
+}
+
+TAB="$(printf '\t')"
+
+# Each SSID once at its strongest, strongest first; hidden ones left out. SSIDs stay as
+# wpa_cli prints them (printf_encode), like the saved networks the dashboard decodes.
+write_scan() {
+	networks="$(wpa_cli -i "$IFACE" scan_results 2>/dev/null | awk -F'\t' '
+		NR > 1 && $5 != "" && (!($5 in best) || $3 + 0 > best[$5]) { best[$5] = $3 + 0; sec[$5] = ($4 ~ /WPA|RSN|WEP|SAE/) }
+		END { for (s in best) printf "%d\t%d\t%s\n", best[s], sec[s], s }' | sort -t "$TAB" -k1,1 -n -r)"
+	[ -n "$networks" ] || return 0
+	{
+		printf '{"at":%s,"networks":[' "$(date +%s)"
+		sep=
+		printf '%s\n' "$networks" | while IFS="$TAB" read -r sig sec ssid; do
+			secured=false; [ "$sec" = 1 ] && secured=true
+			printf '%s{"ssid":"%s","signal":%s,"secured":%s}' "$sep" "$(json_escape "$ssid")" "$sig" "$secured"
+			sep=,
+		done
+		printf ']}\n'
+	} > "$SCAN_FILE.tmp" && mv -f "$SCAN_FILE.tmp" "$SCAN_FILE"
+}
+
+# A saved network among the ones the radio sees, compared as wpa_cli prints both.
+saved_in_reach() {
+	{ wpa_cli -i "$IFACE" list_networks; echo --; wpa_cli -i "$IFACE" scan_results; } 2>/dev/null | awk -F'\t' '
+		$0 == "--" { scan = 1; next }
+		!scan && NF > 1 { saved[$2] = 1 }
+		scan && NF > 4 && ($5 in saved) { found = 1 }
+		END { exit !found }'
+}
+
+# Why no saved network was joined, in the words the dashboard and the setup screen know.
+join_failure() {
+	if [ -z "$(known_ssids)" ]; then echo no_networks
+	elif wpa_cli -i "$IFACE" list_networks 2>/dev/null | grep -q 'TEMP-DISABLED'; then echo wrong_password
+	elif ! saved_in_reach; then echo not_found
+	else echo not_joined
+	fi
 }
 
 # Readers poll these files: write aside and rename so they never see a partial file.
@@ -77,7 +130,7 @@ write_mode() {
 	known="$(known_ssids)"
 	ap_creds
 	cat > "$JSON_FILE.tmp" <<EOF
-{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$(json_escape "$AP_SSID")","ap_password":"$(json_escape "$AP_PASS")","last_failed_at":$LAST_FAILED_AT}
+{"mode":"$mode","ssid":"$ssid","internet":$internet,"known_ssids":[$known],"ap_ssid":"$(json_escape "$AP_SSID")","ap_password":"$(json_escape "$AP_PASS")","last_failed_at":$LAST_FAILED_AT,"last_failed_reason":"$LAST_FAILED_REASON"}
 EOF
 	mv -f "$JSON_FILE.tmp" "$JSON_FILE"
 }
@@ -104,7 +157,11 @@ wait_for_sta() {
 		have_assoc && break
 		sleep 2; i=$((i + 2))
 	done
-	have_assoc || return 1
+	write_scan
+	if ! have_assoc; then
+		FAILED_REASON="$(join_failure)"
+		return 1
+	fi
 
 	grace=$NO_ADDR_TIMEOUT
 	[ -e "$LEASED_FLAG" ] && grace=$DHCP_GRACE
@@ -114,17 +171,26 @@ wait_for_sta() {
 			: > "$LEASED_FLAG"
 			return 0
 		fi
-		have_assoc || return 1   # dropped association while waiting -> re-eval
+		if ! have_assoc; then    # dropped association while waiting -> re-eval
+			FAILED_REASON="$(join_failure)"
+			return 1
+		fi
 		sleep 2; i=$((i + 2))
 	done
 	[ -e "$LEASED_FLAG" ] && return 0
-	FALLBACK_REASON="no address from $(cur_ssid)"
+	FALLBACK_REASON="no address from the network"
+	FAILED_REASON=no_address
 	return 1
 }
 
 enter_connected() {
-	log "mode -> connected (ssid=$(cur_ssid))"
+	log "mode -> connected"
 	LAST_FAILED_AT=0
+	LAST_FAILED_REASON=""
+	if [ ! -e "$JOINED_FLAG" ]; then
+		mkdir -p "$(dirname "$JOINED_FLAG")"
+		write_durable "$JOINED_FLAG" "$(date +%s)"
+	fi
 	shareframe-event wifi "connected"
 	set_led normal
 	write_mode connected
@@ -196,6 +262,8 @@ ap_wait_then_retry() {
 		fi
 		if [ "$elapsed" -ge "$AP_RETRY_EVERY" ]; then
 			elapsed=0
+			# Nothing saved to try: tearing the hotspot down would only cut the owner off.
+			[ -n "$(known_ssids)" ] || continue
 			case "$(shareframe-ap status 2>/dev/null)" in
 				*stations=0) log "periodic station retry"; return ;;
 				*) log "client(s) connected; holding AP" ;;
@@ -213,6 +281,7 @@ while :; do
 		monitor_connected
 	else
 		LAST_FAILED_AT="$(date +%s)"
+		LAST_FAILED_REASON="$FAILED_REASON"
 		enter_ap
 		ap_wait_then_retry
 	fi

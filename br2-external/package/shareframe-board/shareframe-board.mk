@@ -32,10 +32,10 @@ SHAREFRAME_BOARD_APP_SHA = $(or $(APP_SHA),$(shell git -C $(SHAREFRAME_BOARD_SRC
 # overlay ships. Default keeps bare `make` working.
 SHAREFRAME_PROFILE ?= prod
 
-# E-Paper driver toggle (default OFF -> no-op display). ON links the Waveshare
-# SPI/GPIO driver. CMake caches it: flipping the value needs a dirclean, not just
-# a reconfigure.
-SHAREFRAME_EPD ?= OFF
+# E-Paper driver toggle: ON links the Waveshare SPI/GPIO driver, OFF a no-op display
+# (default for the sim profile, which has no panel). CMake caches it: flipping the
+# value needs a dirclean, not just a reconfigure.
+SHAREFRAME_EPD ?= $(if $(filter sim,$(SHAREFRAME_PROFILE)),OFF,ON)
 
 # Outbound IP family (default AF_UNSPEC -> resolver decides). AF_INET forces IPv4.
 # Patched into the vendored IXWebSocket source; re-applies on reconfigure, no dirclean.

@@ -17,6 +17,7 @@ online() { # wpa_cli of a running supplicant with the given "id<TAB>ssid" networ
 	stub wpa_cli "case \"\$3\" in
 		ping) echo PONG ;;
 		list_networks) echo 'network id / ssid / bssid / flags'; sed 's/\$/\tany\t/' '$T/networks' ;;
+		add_network) echo 7 ;;
 		*) echo OK ;;
 	esac"
 }
@@ -50,6 +51,41 @@ office"
 	assert_equal "$(grep -c 'key_mgmt=NONE' "$WPA_CONF")" 1
 }
 
+# The dashboard saves a network again to fix its password: that must not stack up blocks.
+@test "offline add of a saved network replaces its password instead of adding a block" {
+	shareframe-wifi add home new-pass
+	assert_equal "$(blocks)" 1
+	assert_equal "$(grep -c "psk=$(printf %s homenew-pass | sha256sum | cut -c1-64)" "$WPA_CONF")" 1
+	assert_equal "$(grep -c 'psk=aaaa' "$WPA_CONF")" 0
+}
+
+@test "offline add of a saved network without a password makes it open" {
+	shareframe-wifi add home
+	assert_equal "$(blocks)" 1
+	assert_equal "$(grep -c 'key_mgmt=NONE' "$WPA_CONF")" 1
+	assert_equal "$(grep -c 'psk=' "$WPA_CONF")" 0
+}
+
+@test "offline add of an open network again with a password secures it" {
+	shareframe-wifi add cafe
+	shareframe-wifi add cafe cafe-pass-1
+	assert_equal "$(blocks)" 2
+	assert_equal "$(grep -c 'key_mgmt=NONE' "$WPA_CONF")" 0
+}
+
+@test "online add of a saved network changes it in place" {
+	online "$(printf '0\thome')"
+	shareframe-wifi add home new-pass >/dev/null
+	assert_called 'wpa_cli -i wlan0 set_network 0 psk'
+	refute_called 'wpa_cli -i wlan0 add_network'
+}
+
+@test "online add hands the SSID over as hex, so quotes in it cannot break the command" {
+	online "$(printf '0\thome')"
+	shareframe-wifi add 'x"y' secret-pass >/dev/null
+	assert_called 'wpa_cli -i wlan0 set_network 7 ssid 782279'
+}
+
 @test "offline del removes exactly the named block, by its listed or its raw SSID" {
 	shareframe-wifi add office secret-pass
 	shareframe-wifi add ünicode secret-pass
@@ -64,7 +100,8 @@ office"
 	before="$(cat "$WPA_CONF")"
 	run shareframe-wifi del nowhere
 	assert_failure 1
-	assert_output --partial "no network matching 'nowhere'"
+	assert_output --partial "no such network"
+	refute_output --partial nowhere
 	assert_equal "$(cat "$WPA_CONF")" "$before"
 }
 

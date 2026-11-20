@@ -1,4 +1,5 @@
 import { onBoard } from '@board/board';
+import { signIn } from '@board/fixtures';
 import { boots, expect, powerCut, rebootCleanly, resetWorld, test, waitForBoard, waitForWifi } from '../support/sim';
 
 // The display's safe mode on the real image: boot-guard and display-crash-guard keep a loop
@@ -37,9 +38,9 @@ test('power cuts in a row put the display into safe mode until a clean boot', as
   await expect.poll(displayUp, { message: 'display back' }).toBe(true);
 });
 
-test('a display that keeps crashing is kept down until the next boot', async ({ server }) => {
+/** Crashes the display five times in a row, which trips its safe mode. */
+async function crashDisplayFiveTimes() {
   await expect.poll(displayUp).toBe(true);
-  const crashes = await displayCrashes();
   let pid = await displayPid();
   for (let i = 1; i <= 5; i++) {
     expect(pid).toBeGreaterThan(1);
@@ -50,8 +51,13 @@ test('a display that keeps crashing is kept down until the next boot', async ({ 
     await expect.poll(async () => { pid = await displayPid(); return pid > 1 && pid !== crashed; },
       { message: `display restarted after crash ${i}` }).toBe(true);
   }
-
   await expect.poll(safeMode, { message: 'safe mode tripped' }).toBe('display-crash');
+}
+
+test('a display that keeps crashing is kept down until the next boot', async ({ server }) => {
+  const crashes = await displayCrashes();
+  await crashDisplayFiveTimes();
+
   await expect.poll(displayUp, { message: 'display kept down' }).toBe(false);
   expect(await displayCrashes()).toBe(crashes + 5);
   await expect.poll(async () => (await server.state()).heartbeats.at(-1)?.safe_mode, { timeout: 2 * 60_000 })
@@ -60,4 +66,19 @@ test('a display that keeps crashing is kept down until the next boot', async ({ 
   await rebootCleanly();
   expect(await safeMode()).toBe('');
   await expect.poll(displayUp, { message: 'display back' }).toBe(true);
+});
+
+// Without this the owner would only see a frame that went blank.
+test('the owner sees why the display is off and turns it back on from the dashboard', async ({ page }) => {
+  await crashDisplayFiveTimes();
+  await expect.poll(displayUp, { message: 'display kept down' }).toBe(false);
+
+  await signIn(page);
+  const notice = page.getByRole('region', { name: 'Anzeige ausgeschaltet' });
+  await expect(notice.getByText(/mehrmals abgestürzt/)).toBeVisible({ timeout: 30_000 });
+  await notice.getByRole('button', { name: 'Anzeige wieder einschalten' }).click();
+
+  await expect.poll(displayUp, { message: 'display back' }).toBe(true);
+  expect(await safeMode()).toBe('');
+  await expect(notice).toBeHidden({ timeout: 30_000 });
 });

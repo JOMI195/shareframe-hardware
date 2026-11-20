@@ -3,7 +3,7 @@
 # uplink live in their own netns so the board only reaches them over the air:
 #   world  home + office access points bridged onto the uplink (DHCP, internet)
 #   phone  a client that joins the board's hotspot
-# usage: world init [--uplink-down] | status
+# usage: world init [--uplink-down] [--aps-down] | status
 #        world ap <home|office> up|down|psk <pass>
 #        world uplink up|down
 #        world phone join [ssid pass] | leave | get <path>
@@ -72,8 +72,16 @@ ap_down() {
 	done
 }
 
-init() {
+init() { # [--uplink-down] [--aps-down]
 	[ -f "$RUN/ready" ] && return 0
+	uplink_down=no aps_down=no
+	for opt in "$@"; do
+		case "$opt" in
+			--uplink-down) uplink_down=yes ;;
+			--aps-down) aps_down=yes ;;
+			*) die "init: unknown option $opt" ;;
+		esac
+	done
 	mkdir -p "$RUN"
 	printf 'home-pass-123' > "$RUN/home.psk"
 	printf 'office-pass-123' > "$RUN/office.psk"
@@ -88,7 +96,7 @@ init() {
 	$W ip link set lo up
 	$W ip link add br0 type bridge
 	$W ip link set "$uplink" master br0
-	[ "${1:-}" = --uplink-down ] || $W ip link set "$uplink" up
+	[ "$uplink_down" = yes ] || $W ip link set "$uplink" up
 	$W ip link set br0 up
 	$W ip addr add 10.0.2.250/24 dev br0
 	$P ip link set lo up
@@ -108,8 +116,10 @@ esac
 EOF
 	chmod +x "$RUN/udhcpc.sh"
 
-	ap_up home
-	ap_up office
+	if [ "$aps_down" = no ]; then
+		ap_up home
+		ap_up office
+	fi
 	touch "$RUN/ready"
 }
 

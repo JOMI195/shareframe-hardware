@@ -22,17 +22,22 @@ wpa_ok() {
 	out="$(${WPA} "$@" 2>&1)" || true
 	case "$out" in
 		OK*) printf '%s\n' "$out" ;;
-		*FAIL*|*"Could not connect"*) die "wpa_cli $* -> $out" ;;
+		*FAIL*|*"Could not connect"*) die "wpa_cli $1 -> $out" ;;
 		*) printf '%s\n' "$out" ;;
 	esac
+}
+
+# The numeric network id of <ssid>, as listed or raw; empty when none.
+find_ssid_id() {
+	${WPA} list_networks 2>/dev/null \
+		| SSID="$1" LISTED="$(shown "$(to_hex "$1")")" \
+			awk -F'\t' 'NR>1 && ($2==ENVIRON["SSID"] || $2==ENVIRON["LISTED"]) { print $1; exit }'
 }
 
 # Resolve <ssid|id> to numeric network id. Empty result = not found. An SSID
 # wins over an id, so a network named "5" is never mistaken for network 5.
 find_id() {
-	id="$(${WPA} list_networks 2>/dev/null \
-		| SSID="$1" LISTED="$(shown "$(to_hex "$1")")" \
-			awk -F'\t' 'NR>1 && ($2==ENVIRON["SSID"] || $2==ENVIRON["LISTED"]) { print $1; exit }')"
+	id="$(find_ssid_id "$1")"
 	if [ -z "$id" ]; then
 		case "$1" in ''|*[!0-9]*) ;; *) id="$1" ;; esac
 	fi
@@ -80,7 +85,7 @@ conf_block() {
 	done
 }
 
-# rewrite_block <n> drop | psk <hash>: in place, so the file keeps its mode.
+# rewrite_block <n> drop | psk <hash> | open: in place, so the file keeps its mode.
 rewrite_block() {
 	tmp="$CONF.tmp"
 	N="$1" OP="$2" HASH="${3:-}" awk '
@@ -88,8 +93,9 @@ rewrite_block() {
 		/^[[:space:]]*network=[{]/ { b++; inb = 1; buf = $0 "\n"; next }
 		inb {
 			mine = (b - 1 == n)
-			if (mine && op == "psk" && $0 ~ /^[[:space:]]*(psk|key_mgmt)=/) next
+			if (mine && op != "drop" && $0 ~ /^[[:space:]]*(psk|key_mgmt)=/) next
 			if (mine && op == "psk" && $0 ~ /^[[:space:]]*}/) buf = buf "\tpsk=" hash "\n"
+			if (mine && op == "open" && $0 ~ /^[[:space:]]*}/) buf = buf "\tkey_mgmt=NONE\n"
 			buf = buf $0 "\n"
 			if ($0 ~ /^[[:space:]]*}/) { inb = 0; if (!(mine && op == "drop")) printf "%s", buf }
 			next
@@ -100,7 +106,7 @@ rewrite_block() {
 
 psk_hash() { # <ssid> <psk>
 	hash="$(wpa_passphrase "$1" "$2" 2>/dev/null | awk -F= '/^[[:space:]]*psk=/ { print $2; exit }')"
-	[ -n "$hash" ] || die "wpa_passphrase failed for ssid=$1"
+	[ -n "$hash" ] || die "wpa_passphrase refused the password"
 	printf '%s\n' "$hash"
 }
 
@@ -146,15 +152,10 @@ cmd_scan() {
 # Add a network by appending a block straight to the config, used when
 # wpa_supplicant is down (AP fallback mode). wpa_supplicant reads the new block
 # when the manager brings it back up.
-add_offline() {
-	ssid="$1"; psk="$2"
+add_offline() { # <ssid> <psk hash, empty for an open network>
+	ssid="$1"
 	[ -f "$CONF" ] || die "offline add: $CONF missing"
-	if [ -z "$psk" ]; then
-		auth="key_mgmt=NONE"
-	else
-		hash="$(psk_hash "$ssid" "$psk")"
-		auth="psk=$hash"
-	fi
+	if [ -z "$2" ]; then auth="key_mgmt=NONE"; else auth="psk=$2"; fi
 	# Hex, so no SSID can break out of its block.
 	printf '\nnetwork={\n\tssid=%s\n\t%s\n}\n' "$(to_hex "$ssid")" "$auth" >> "$CONF"
 	printf 'added network (offline) ssid=%s\n' "$ssid"
@@ -165,25 +166,37 @@ cmd_add() {
 	ssid="$1"
 	psk="${2:-}"
 
+	# Hashed, so the plaintext PSK never lands in the conf; first, so a rejected one changes nothing.
+	hash=
+	[ -z "$psk" ] || hash="$(psk_hash "$ssid" "$psk")"
+
 	# AP fallback: wpa_supplicant is stopped, so write the conf directly.
 	if ! wpa_running; then
-		add_offline "$ssid" "$psk"
+		# A saved network is updated, never stacked a second time.
+		n="$(conf_block "$ssid")"
+		if [ -n "$n" ]; then
+			if [ -z "$hash" ]; then rewrite_block "$n" open; else rewrite_block "$n" psk "$hash"; fi
+			printf 'updated network (offline) ssid=%s\n' "$ssid"
+			return 0
+		fi
+		add_offline "$ssid" "$hash"
 		return 0
 	fi
 
-	id="$(${WPA} add_network | tail -1)"
-	case "$id" in
-		''|*[!0-9]*) die "add_network returned: $id" ;;
-	esac
+	id="$(find_ssid_id "$ssid")"
+	if [ -z "$id" ]; then
+		id="$(${WPA} add_network | tail -1)"
+		case "$id" in
+			''|*[!0-9]*) die "add_network returned: $id" ;;
+		esac
+		# Hex: no character of the SSID can end the argument early.
+		wpa_ok set_network "$id" ssid "$(to_hex "$ssid")" >/dev/null
+	fi
 
-	# ssid must be quoted in wpa_cli set_network.
-	wpa_ok set_network "$id" ssid "\"${ssid}\"" >/dev/null
-
-	if [ -z "$psk" ]; then
+	if [ -z "$hash" ]; then
 		wpa_ok set_network "$id" key_mgmt NONE >/dev/null
 	else
-		# Hashed, so the plaintext PSK never lands in the conf.
-		hash="$(psk_hash "$ssid" "$psk")"
+		wpa_ok set_network "$id" key_mgmt WPA-PSK >/dev/null
 		wpa_ok set_network "$id" psk "$hash" >/dev/null
 	fi
 
@@ -196,7 +209,7 @@ cmd_add() {
 del_offline() {
 	[ -f "$CONF" ] || die "offline del: $CONF missing"
 	n="$(conf_block "$1")"
-	[ -n "$n" ] || die "del: no network matching '$1'"
+	[ -n "$n" ] || die "del: no such network"
 	rewrite_block "$n" drop
 	printf 'removed network (offline) ssid=%s\n' "$1"
 }
@@ -204,7 +217,7 @@ del_offline() {
 mod_offline() {
 	[ -f "$CONF" ] || die "offline mod: $CONF missing"
 	n="$(conf_block "$1")"
-	[ -n "$n" ] || die "mod: no network matching '$1'"
+	[ -n "$n" ] || die "mod: no such network"
 	ssid="$(raw "$(conf_ssids_hex | sed -n "$((n + 1))p")")"
 	hash="$(psk_hash "$ssid" "$2")"
 	rewrite_block "$n" psk "$hash"
@@ -218,7 +231,7 @@ cmd_del() {
 		return 0
 	fi
 	id="$(find_id "$1")"
-	[ -n "$id" ] || die "del: no network matching '$1'"
+	[ -n "$id" ] || die "del: no such network"
 	wpa_ok remove_network "$id" >/dev/null
 	wpa_ok save_config >/dev/null
 	printf 'removed network id=%s\n' "$id"
@@ -231,7 +244,7 @@ cmd_mod() {
 		return 0
 	fi
 	id="$(find_id "$1")"
-	[ -n "$id" ] || die "mod: no network matching '$1'"
+	[ -n "$id" ] || die "mod: no such network"
 
 	# The current ssid, quoted or hex, is the salt of the hash.
 	v="$(${WPA} get_network "$id" ssid)"
@@ -239,7 +252,7 @@ cmd_mod() {
 		\"*\") ssid="${v#\"}"; ssid="${ssid%\"}" ;;
 		*) ssid="$(raw "$v")" ;;
 	esac
-	[ -n "$ssid" ] || die "mod: could not read ssid for id=$id"
+	[ -n "$ssid" ] || die "mod: could not read the ssid of network $id"
 
 	hash="$(psk_hash "$ssid" "$2")"
 	wpa_ok set_network "$id" psk "$hash" >/dev/null
