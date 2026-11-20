@@ -7,7 +7,11 @@ setup() {
 	mkdir -p "$T/ctl" "$T/run" "$T/led"
 	for cmd in shareframe-event s6-svc; do stub "$cmd"; done
 	# The radio as the control files describe it.
-	quiet_stub wpa_cli "[ -f '$T/ctl/assoc' ] && printf 'wpa_state=COMPLETED\\nssid=home\\n' || printf 'wpa_state=SCANNING\\n'"
+	quiet_stub wpa_cli "case \"\$3\" in
+	scan_results) echo 'bssid / frequency / signal level / flags / ssid'; cat '$T/ctl/scan' 2>/dev/null ;;
+	list_networks) echo 'network id / ssid / bssid / flags'; printf '0\\thome\\tany\\t%s\\n' \"\$(cat '$T/ctl/flags' 2>/dev/null)\" ;;
+	*) [ -f '$T/ctl/assoc' ] && printf 'wpa_state=COMPLETED\\nssid=home\\n' || printf 'wpa_state=SCANNING\\n' ;;
+	esac"
 	quiet_stub ip "[ -f '$T/ctl/address' ] && echo '    inet 192.168.1.5/24 scope global wlan0'
 [ -f '$T/ctl/linklocal' ] && echo '    inet 169.254.7.7/16 scope link wlan0'
 exit 0"
@@ -19,6 +23,7 @@ exit 0"
 	export STATE_DIR="$T/run" SVC="$T/service" CONSOLE=/dev/null LOGGER=true STACK_RESTART="$STUBS/wifi-stack-restart"
 	export AP_CONF="$T/ap.conf" WPA_CONF="$T/wpa_supplicant.conf" JOINED_FLAG="$T/data/wifi-joined"
 	export ASSOC_TIMEOUT=4 DHCP_GRACE=4 NO_ADDR_TIMEOUT=4 AP_RETRY_EVERY=1000000
+	export BACKEND_OK="$T/run/backend-ok"
 	export LED="$T/led" SAFE_MODE="$T/run/safe-mode" LED_RUN="$T/run/led"
 	echo 1 > "$T/led/max_brightness"
 	echo "none [timer]" > "$T/led/trigger"
@@ -34,6 +39,7 @@ teardown() { stop; }
 start() { rm -f "$CALLS" "$T/run/wifi-mode"; "$S6/wifi-mode-manager" 3>&- & pid=$!; }
 stop() { [ -z "$pid" ] || { kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; pid=; } || true; }
 radio() { touch "${@/#/$T/ctl/}"; }
+seen() { printf '00:11:22:33:44:55\t2412\t%s\t%s\t%s\n' "$2" "$3" "$1" >> "$T/ctl/scan"; } # seen <ssid> <signal> <flags>
 no_radio() { rm -f "${@/#/$T/ctl/}"; }
 
 mode() { cat "$T/run/wifi-mode" 2>/dev/null; }
@@ -83,6 +89,76 @@ in_hotspot() {
 	echo kept > "$JOINED_FLAG"
 	connected
 	assert_equal "$(cat "$JOINED_FLAG")" kept
+}
+
+@test "each station attempt leaves the networks in reach for the dashboard, strongest first" {
+	seen home -70 '[WPA2-PSK-CCMP][ESS]'
+	seen home -40 '[WPA2-PSK-CCMP][ESS]'
+	seen 'Caf\xc3\xa9 "x"' -60 '[ESS]'
+	seen '' -30 '[WPA2-PSK-CCMP][ESS]'
+	connected
+	eventually 5 test -s "$T/run/wifi-scan.json"
+	run jq -c '.networks' "$T/run/wifi-scan.json"
+	assert_output '[{"ssid":"home","signal":-40,"secured":true},{"ssid":"Caf\\xc3\\xa9 \"x\"","signal":-60,"secured":false}]'
+	[ "$(jq '.at' "$T/run/wifi-scan.json")" -gt 0 ]
+}
+
+# The setup screen and the dashboard tell the owner what to fix.
+@test "a refused password is named when the hotspot comes back" {
+	seen home -40 '[WPA2-PSK-CCMP][ESS]'
+	echo '[TEMP-DISABLED]' > "$T/ctl/flags"
+	start
+	eventually 10 is mode ap
+	assert_equal "$(json last_failed_reason)" wrong_password
+}
+
+@test "a saved network out of reach is named" {
+	seen neighbour -40 '[WPA2-PSK-CCMP][ESS]'
+	start
+	eventually 10 is mode ap
+	assert_equal "$(json last_failed_reason)" not_found
+}
+
+@test "a saved network in reach that does not take the frame is named" {
+	seen home -40 '[WPA2-PSK-CCMP][ESS]'
+	start
+	eventually 10 is mode ap
+	assert_equal "$(json last_failed_reason)" not_joined
+}
+
+@test "a network that hands out no address is named" {
+	radio assoc linklocal
+	start
+	eventually 10 is mode ap
+	assert_equal "$(json last_failed_reason)" no_address
+}
+
+@test "with nothing saved the hotspot stays up, no station retry tears it down" {
+	printf 'ctrl_interface=/var/run/wpa_supplicant\n' > "$WPA_CONF"
+	export AP_RETRY_EVERY=1
+	start
+	eventually 10 is mode ap
+	assert_equal "$(json last_failed_reason)" no_networks
+	rm -f "$CALLS"
+	/usr/bin/sleep 1
+	refute_called 'shareframe-ap down'
+}
+
+# Some networks block ping; the heartbeat's mark proves the way out.
+@test "a recent answer from the server counts as internet where ping is blocked" {
+	date +%s > "$BACKEND_OK"
+	radio assoc address
+	start
+	eventually 10 is mode connected
+	eventually 10 is json true internet
+}
+
+@test "an old answer from the server does not count as internet" {
+	echo 1000 > "$BACKEND_OK"
+	radio assoc address
+	start
+	eventually 10 is mode connected
+	eventually 10 is json false internet
 }
 
 @test "an LED repainted by a stack restart is set right again" {
@@ -168,7 +244,19 @@ pa\"ss\\word's"
 @test "golden wifi-mode-ap.json: the hotspot with credentials that need escaping" {
 	fixed_clock
 	printf '%s\n' "AP_SSID='frame \"one\"'" "AP_PASS='pa\"ss\\word'\\''s'" > "$AP_CONF"
+	echo '[TEMP-DISABLED]' > "$T/ctl/flags"
 	in_hotspot
 	eventually 10 failed_recently
 	assert_golden wifi-mode-ap.json "$T/run/wifi-mode.json"
+}
+
+# bats test_tags=contract
+@test "golden wifi-scan.json: the networks the dashboard offers, with names that need escaping" {
+	fixed_clock
+	seen home -48 '[WPA2-PSK-CCMP][ESS]'
+	seen 'Caf\xc3\xa9 "Gast"' -61 '[ESS]'
+	seen 'back\\slash' -75 '[WPA3-SAE-CCMP][ESS]'
+	connected
+	eventually 5 test -s "$T/run/wifi-scan.json"
+	assert_golden wifi-scan.json "$T/run/wifi-scan.json"
 }

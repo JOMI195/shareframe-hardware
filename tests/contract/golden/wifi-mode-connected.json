@@ -1,1 +1,1 @@
-{"mode":"connected","ssid":"home","internet":true,"known_ssids":["home"],"ap_ssid":"frame-ap","ap_password":"hotspot123","last_failed_at":0}
+{"mode":"connected","ssid":"home","internet":true,"known_ssids":["home"],"ap_ssid":"frame-ap","ap_password":"hotspot123","last_failed_at":0,"last_failed_reason":""}
