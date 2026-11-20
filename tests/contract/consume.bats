@@ -24,7 +24,7 @@ setup() {
 }
 
 default_of() { # <script> <variable>: the variable's value with nothing overridden
-	env -i PATH="$PATH" sh -c "$(grep -E "^(IFACE|STATE_DIR|MODE_FILE|JSON_FILE|RETRY_FLAG|BACKEND_OK)=" "$1"); echo \"\$$2\""
+	env -i PATH="$PATH" sh -c "$(grep -E "^(IFACE|STATE_DIR|MODE_FILE|JSON_FILE|RETRY_FLAG|BACKEND_OK|JOINED_FLAG|DATA_DIR|RUN_DIR)=" "$1"); echo \"\$$2\""
 }
 
 # bats test_tags=contract
@@ -33,4 +33,14 @@ default_of() { # <script> <variable>: the variable's value with nothing overridd
 	assert_equal "$(default_of "$S6/wifi-mode-manager" JSON_FILE)" "$(flag wifi_mode)"
 	assert_equal "$(default_of "$S6/wifi-mode-manager" RETRY_FLAG)" "$(flag wifi_retry_requested)"
 	assert_equal "$(default_of "$S6/rauc-mark-good" BACKEND_OK)" "$(flag backend_ok)"
+	assert_equal "$(default_of "$BIN/shareframe-safe-mode" RUN_DIR)/safe-mode" "$(flag safe_mode)"
+}
+
+# bats test_tags=contract
+@test "the display finds the setup and owner marks where the scripts leave them" {
+	flag() { sed -n "s/^$1=//p" "$GOLDEN/run-flags.txt"; }
+	migration="$OVERLAY/usr/share/shareframe/system-migrations/001-mark-set-up-frames.sh"
+	assert_equal "$(default_of "$S6/wifi-mode-manager" JOINED_FLAG)" "$(flag wifi_joined)"
+	assert_equal "$(default_of "$migration" DATA_DIR)/wifi-joined" "$(flag wifi_joined)"
+	assert_equal "$(default_of "$migration" DATA_DIR)/registered-once" "$(flag registered_once)"
 }
