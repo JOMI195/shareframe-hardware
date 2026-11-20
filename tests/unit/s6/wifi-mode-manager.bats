@@ -159,17 +159,17 @@ in_hotspot() {
 	refute_called 'shareframe-ap down'
 }
 
-# Some networks block ping; the heartbeat's mark proves the way out.
+# Some networks block ping; the heartbeat's mark proves the way out until the time it holds.
 @test "a recent answer from the server counts as internet where ping is blocked" {
-	date +%s > "$BACKEND_OK"
+	echo $(($(date +%s) + 60)) > "$BACKEND_OK"
 	radio assoc address
 	start
 	eventually 10 is mode connected
 	eventually 10 is json true internet
 }
 
-@test "an old answer from the server does not count as internet" {
-	echo 1000 > "$BACKEND_OK"
+@test "an answer whose time is up does not count as internet" {
+	echo $(($(date +%s) - 1)) > "$BACKEND_OK"
 	radio assoc address
 	start
 	eventually 10 is mode connected

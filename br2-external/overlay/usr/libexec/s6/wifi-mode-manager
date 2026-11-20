@@ -18,9 +18,9 @@ SWITCH_FLAG="$STATE_DIR/wifi-switching"
 LEASED_FLAG="$STATE_DIR/wifi-leased"
 # The networks the last station attempt saw, for the dashboard to offer while the hotspot has the radio.
 SCAN_FILE="$STATE_DIR/wifi-scan.json"
-# The heartbeat's last server contact (unix seconds); proves internet where ping is blocked.
+# Until when the heartbeat's last server contact counts (unix seconds); proves internet where
+# ping is blocked.
 BACKEND_OK="${BACKEND_OK:-/run/shareframe/backend-ok}"
-BACKEND_FRESH="${BACKEND_FRESH:-660}"      # two heartbeats of the prod config
 AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
 # Exists once the frame has joined a wifi; until then the display keeps its setup screen up.
 JOINED_FLAG="${JOINED_FLAG:-/data/shareframe/wifi-joined}"
@@ -63,9 +63,9 @@ have_assoc() { wpa_cli -i "$IFACE" status 2>/dev/null | grep -q '^wpa_state=COMP
 have_ip()    { ip -4 addr show "$IFACE" 2>/dev/null | grep 'inet ' | grep -qv 'inet 169\.254\.'; }
 have_internet() { ping -c1 -W1 1.1.1.1 >/dev/null 2>&1 || backend_fresh; }
 backend_fresh() {
-	at="$(head -n1 "$BACKEND_OK" 2>/dev/null)"
-	case "$at" in ''|*[!0-9]*) return 1 ;; esac
-	[ $(($(date +%s) - at)) -lt "$BACKEND_FRESH" ]
+	valid_until="$(head -n1 "$BACKEND_OK" 2>/dev/null)"
+	case "$valid_until" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$(date +%s)" -lt "$valid_until" ]
 }
 cur_ssid() {
 	# Strip quotes/backslashes so the value is safe to embed in JSON.
