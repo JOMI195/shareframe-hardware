@@ -16,6 +16,11 @@ setup() {
 		'    def do_GET(self):' \
 		'        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()' \
 		'        self.wfile.write(b"{\"success\":true,\"data\":{\"path\":\"" + self.path.encode() + b"\"}}")' \
+		'    def do_POST(self):' \
+		'        n = int(self.headers["Content-Length"] or 0); self.rfile.read(n)' \
+		'        enc = self.headers.get("Content-Encoding") or "none"' \
+		'        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()' \
+		'        self.wfile.write(("{\"encoding\":\"%s\",\"length\":%d}" % (enc, n)).encode())' \
 		'    def log_message(self, *a): pass' \
 		'http.server.HTTPServer(("127.0.0.1", 8080), H).serve_forever()' > "$T/backend.py"
 	# Like the board's backend: an HTTP/1.1 answer without "Connection: close", one request per
@@ -77,6 +82,18 @@ board() {
 	run board with-backend http://127.0.0.1/api/system/info
 	assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
 	assert_line --regexp '^200'
+}
+
+# The backend inflates a gzip request body without a limit; nginx keeps both the size and the encoding away.
+@test "an oversized request body never reaches the backend" {
+	head -c 100000 /dev/zero > "$T/big.bin"
+	run board with-backend -X POST --data-binary @"$T/big.bin" http://127.0.0.1/api/auth/login
+	assert_line --regexp '^413'
+}
+
+@test "a request body's content encoding is not passed to the backend" {
+	run board with-backend -X POST -H Content-Encoding:gzip -d x http://127.0.0.1/api/auth/login
+	assert_line '{"encoding":"none","length":1}'
 }
 
 # A POST is never retried by nginx, so one sent down a connection the backend already dropped is a 502.
