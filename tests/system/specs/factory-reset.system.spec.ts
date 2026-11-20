@@ -1,4 +1,4 @@
-import { BoardApi, DASHBOARD_PASSWORD, onBoard } from '@board/board';
+import { BoardApi, codeOn, DASHBOARD_PASSWORD, onBoard, showsStatus, waitForPanel } from '@board/board';
 import {
   boots, consoleLog, expect, lastBootRecord, powerCut, resetWorld, test, waitForBoard, waitForWifi,
 } from '../support/sim';
@@ -54,6 +54,33 @@ test('a factory reset brings the factory state back and keeps the frame who it i
   expect((await owner.get('/api/system/info')).serial_number).toBe(serial);
   await expect.poll(async () => (await server.state()).tokenRequests, { message: 'a new token for the same frame', timeout: 5 * 60_000 })
     .toBeGreaterThan(tokenRequests);
+  await server.waitForFrame();
+});
+
+// The owner, not the admin: a forgotten password, the reset page signed out, and the code the
+// panel shows as the proof of standing at the frame.
+test('an owner who forgot the password resets with the code from the panel', async ({ page, request, server, board }) => {
+  await server.waitForFrame();
+  const serial = (await board.get('/api/system/info')).serial_number;
+  await board.post('/api/auth/change-password', { current_password: DASHBOARD_PASSWORD, new_password: 'forgotten-pass-1' });
+  await onBoard('touch /data/shareframe/left-behind');
+  const n = (await boots()).length;
+
+  await page.goto('/auth/sign-in');
+  await page.getByRole('link', { name: 'Passwort vergessen?' }).click();
+  await page.getByRole('button', { name: 'Code auf dem Bilderrahmen anzeigen' }).click();
+  const code = codeOn(await waitForPanel(showsStatus('reset_code'), 'reset code on the panel', 120_000));
+  await page.getByLabel('Code').fill(code);
+  await page.getByRole('button', { name: 'Endgültig zurücksetzen' }).click();
+
+  await expect.poll(async () => (await boots()).length, { message: 'booted again', timeout: 5 * 60_000, intervals: [3000] })
+    .toBe(n + 1);
+  await waitForBoard();
+  expect((await onBoard('ls -A /data/shareframe')).toString()).not.toContain('left-behind');
+  await waitForWifi(request, { mode: 'connected', ssid: 'home', internet: true });
+  const owner = new BoardApi(request);
+  await owner.login();
+  expect((await owner.get('/api/system/info')).serial_number).toBe(serial);
   await server.waitForFrame();
 });
 

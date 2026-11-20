@@ -197,8 +197,10 @@ and `update` to change the world → `status`, `panel`, `logs` to see what the b
 `tests/system/specs/*.system.spec.ts`, with `playwright.config.ts` and `tsconfig.json` next to
 them:
 
-- `network`: the saved network, the hotspot and a phone setting up a new one, roaming, a
-  changed router password, an internet outage.
+- `network`: the saved network, the hotspot and a phone setting up a new one picked from the
+  networks in reach, a restart without any network that shows a setup code which signs the
+  owner in, roaming, a changed router password named as such and fixed by saving it again, an
+  internet outage.
 - `update`: a corrupt bundle, one signed with a foreign key, a trial boot that fails and
   rolls back, a real install that is committed and survives a reboot, a release whose
   migration deletes the identity, the database and the Wi-Fi config (the trial boot restores
@@ -210,15 +212,17 @@ them:
   services page against real s6, the support package, the hotspot password a phone needs,
   `/data` grown to the end of the card on the first boot only.
 - `factory-reset`: the admin's reset wipes the owner's pictures (files too), passwords and
-  networks and the ssh host key, the frame keeps its identity and its factory network; a
-  power cut before or in the middle of the format still ends in the factory state.
+  networks and the ssh host key, the frame keeps its identity and its factory network; an
+  owner who forgot the password resets signed out with the code from the panel; a power cut
+  before or in the middle of the format still ends in the factory state.
 - `resources`: a process eating all memory is killed by earlyoom, not the kernel; the
   dashboard and the heartbeat show it, the board's services keep running.
 - `safe-mode`: power cuts in a row and a crashing display keep the display down, the
-  heartbeat tells the admin why, a clean boot lifts it.
+  heartbeat tells the admin why, a clean boot lifts it, and the owner sees why on the dashboard
+  and turns the display back on there.
 
 `support/sim.ts` has `world()`, `waitForWifi()`, slots, `boots()`, `breakNextTrial()`,
-`powerCut()`, `rebootCleanly()`, `offlineNextBoot()`, `clockOffset()`, `sysinfo()`, `lastBootRecord()` and
+`powerCut()`, `rebootCleanly()`, `offlineNextBoot()`, `noNetworkNextBoot()`, `clockOffset()`, `sysinfo()`, `lastBootRecord()` and
 `consoleLog()`. Everything else comes from shareframe-board's `tests/e2e/support`
 through `@board/*`: `FakeServer`, `BoardApi`, `signIn`, the panel helpers. The runner mounts
 both repos side by side under `/w` with one `node_modules` from the board repo's lockfile,
