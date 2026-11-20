@@ -165,12 +165,21 @@ function buildroot() {
         *) echo "buildroot: invalid SHAREFRAME_PROFILE='${SHAREFRAME_PROFILE}' (use dev, prod, prod.local, sim)" >&2; return 1 ;;
     esac
     echo "=== SHAREFRAME_PROFILE=${SHAREFRAME_PROFILE} ==="
+    # Only the QEMU sim has no panel to drive.
+    if [ "${SHAREFRAME_PROFILE}" = sim ]; then
+        export SHAREFRAME_EPD="${SHAREFRAME_EPD:-OFF}"
+    else
+        export SHAREFRAME_EPD="${SHAREFRAME_EPD:-ON}"
+    fi
+    echo "=== SHAREFRAME_EPD=${SHAREFRAME_EPD} ==="
 
     # A prod image must be deployable: matching profile, a trust anchor to verify
     # updates, and a real root login. Fail fast before the long build.
     if [ "${SHAREFRAME_BUILD_MODE}" = prod ]; then
         [ "${SHAREFRAME_PROFILE}" = prod ] || {
             echo "buildroot: prod build requires SHAREFRAME_PROFILE=prod (got '${SHAREFRAME_PROFILE}')" >&2; return 1; }
+        [ "${SHAREFRAME_EPD}" = ON ] || {
+            echo "buildroot: prod build requires SHAREFRAME_EPD=ON, a frame without its panel driver shows nothing" >&2; return 1; }
         [ -n "${SHAREFRAME_ROOT_PASSWD:-}" ] || {
             echo "buildroot: prod build requires SHAREFRAME_ROOT_PASSWD (set it in config.env)" >&2; return 1; }
         [ -n "$config_dir" ] && [ -f "$config_dir/overlay/etc/rauc/ca.cert.pem" ] || {
@@ -305,7 +314,7 @@ function buildroot() {
   "app_sha": "${APP_SHA:-unknown}",
   "build_mode": "${SHAREFRAME_BUILD_MODE:-prod}",
   "profile": "${SHAREFRAME_PROFILE:-prod}",
-  "epd": "${SHAREFRAME_EPD:-OFF}",
+  "epd": "${SHAREFRAME_EPD:-ON}",
   "built_at": "$(date --iso-8601=seconds)",
   "built_by": "$(whoami)@$(hostname)"
 }
