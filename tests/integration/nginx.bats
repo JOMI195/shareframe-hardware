@@ -109,6 +109,20 @@ board() {
 	assert_line --regexp '^502'
 }
 
+# A page on another name that rebinds its DNS to the board must not reach the API; a router's DNS name for
+# the board still finds the dashboard, at the address it came in on.
+@test "only the board's own names reach the dashboard, other names are sent to its address" {
+	for host in evil.example shareframe-board-1a2b.fritz.box; do
+		run board with-backend -H "Host:$host" http://127.0.0.1/api/system/info
+		assert_line "302 http://127.0.0.1/"
+		refute_line --partial '"path"'
+	done
+	for host in shareframe-board-1A2B.local shareframe-board.local localhost 10.55.0.1 127.0.0.1; do
+		run board with-backend -H "Host:$host" http://127.0.0.1/api/system/info
+		assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
+	done
+}
+
 @test "the phones' captive-portal probes open the dashboard" {
 	for probe in generate_204 hotspot-detect.html connecttest.txt; do
 		run board without-backend "http://127.0.0.1/$probe"

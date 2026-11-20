@@ -104,7 +104,9 @@ image's files over their paths and wires veth pairs; peers are entered with `nse
 
 - `nginx.bats`: the dashboard SPA and its client routes, `/api` to the backend (also one
   that serves a single request per connection, like the board's), the board's JSON envelope
-  when the backend is down, its errors in syslog, the captive-portal probes, SSDP.
+  when the backend is down, its errors in syslog, the captive-portal probes, SSDP, the names it
+  answers to (other names are sent to the board's address), the body size limit and the request
+  encoding kept from the backend.
 - `usb0.bats`: `setup-usb0` and the image's `udhcpd.conf` lease 10.55.0.2 to the
   computer on the cable, without a router or DNS.
 
@@ -258,9 +260,11 @@ over the USB cable.
 | Part | Check | Expected |
 |---|---|---|
 | e-paper (SPI) | boot; change a picture on the server | boot screen, then the picture; no ghosting after the refresh gap |
+| e-paper codes | boot without Wi-Fi; then request a reset code in the dashboard | the setup code and the reset code are readable from a step away |
+| e-paper failures | unplug the panel's ribbon, wait for three picture changes | the display health turns `failed` (the init alone does not reset the count) |
 | ACT LED | `shareframe-led wifi-down`, `ap-mode`, `updating`, then `normal` | the codes in `docs/led-status-codes.md` |
 | brcmfmac | join a WPA2 network; pull the router's power for 2 min | joined within 45 s; hotspot after the timeout; rejoins when the router is back |
-| hotspot | join from a phone, open any site | the captive portal opens the dashboard |
+| hotspot | join from a phone, open any site | the captive portal opens the dashboard at `192.168.4.1`, on iOS and on Android; the setup code from the panel signs in |
 | USB gadget (dwc2) | plug into a computer | the computer gets 10.55.0.2; `ssh root@10.55.0.1` works, not over Wi-Fi |
 | tryboot | install an update; then one whose trial is broken | the first commits after its reboot; the second boots back to the old slot |
 | SD card power cut | pull the power during a picture change, 5 times | boots every time, `unclean_resets` counts each, pictures and settings kept |
