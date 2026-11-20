@@ -145,6 +145,16 @@ board() {
 	done
 }
 
+# The simulator's test runner reaches the board under a name of its own.
+@test "a build can add names the board answers to" {
+	run board with-backend -H "Host:host.docker.internal" http://127.0.0.1/api/system/info
+	assert_line "302 http://127.0.0.1/"
+	mkdir -p "$T/nginx/own-hosts.d"
+	echo 'host.docker.internal 1;' > "$T/nginx/own-hosts.d/sim.conf"
+	run board with-backend -H "Host:host.docker.internal" http://127.0.0.1/api/system/info
+	assert_line '{"success":true,"data":{"path":"/api/system/info"}}'
+}
+
 @test "the phones' captive-portal probes open the dashboard" {
 	for probe in generate_204 hotspot-detect.html connecttest.txt; do
 		run board without-backend "http://127.0.0.1/$probe"
