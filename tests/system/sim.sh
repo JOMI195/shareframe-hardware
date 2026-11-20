@@ -80,8 +80,10 @@ take() {
 bring_up_world() {
 	wait_for 300 "ssh on the board" bssh true
 	local args=()
-	# One boot without the uplink: set by the specs through $RUN/uplink-down.
-	if take uplink-down; then args=(--uplink-down); fi
+	# One boot without the uplink or without any access point: set by the specs through
+	# $RUN/uplink-down and $RUN/aps-down.
+	if take uplink-down; then args+=(--uplink-down); fi
+	if take aps-down; then args+=(--aps-down); fi
 	bssh /usr/libexec/sim/world init "${args[@]}"
 	local deadline=$((SECONDS + 120)) mode
 	while [ $SECONDS -lt $deadline ]; do

@@ -32,6 +32,7 @@ export type WifiMode = {
   internet: boolean;
   server_connected: boolean | null;
   last_failed_secs_ago: number | null;
+  last_failed_reason: string;
 };
 
 export async function wifiMode(request: APIRequestContext): Promise<WifiMode> {
@@ -136,6 +137,11 @@ export async function rebootCleanly() {
 /** The next boot comes up without the uplink: no router, no internet, no NTP, until `world uplink up`. */
 export async function offlineNextBoot() {
   await request('uplink-down');
+}
+
+/** The next boot finds no access point in reach, until `world ap <name> up`. */
+export async function noNetworkNextBoot() {
+  await request('aps-down');
 }
 
 /** Seconds the board's clock is ahead of the runner's (negative: behind). */
