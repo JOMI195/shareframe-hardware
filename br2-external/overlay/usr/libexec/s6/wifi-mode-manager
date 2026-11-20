@@ -17,6 +17,8 @@ RETRY_FLAG="$STATE_DIR/wifi-retry-requested"
 SWITCH_FLAG="$STATE_DIR/wifi-switching"
 LEASED_FLAG="$STATE_DIR/wifi-leased"
 AP_CONF="${AP_CONF:-/data/wifi/ap.conf}"
+# Exists once the frame has joined a wifi; until then the display keeps its setup screen up.
+JOINED_FLAG="${JOINED_FLAG:-/data/shareframe/wifi-joined}"
 WPA_CONF="${WPA_CONF:-/data/wifi/wpa_supplicant.conf}"
 CONSOLE="${CONSOLE:-/dev/console}"
 LOGGER="${LOGGER:-logger}"
@@ -125,6 +127,10 @@ wait_for_sta() {
 enter_connected() {
 	log "mode -> connected (ssid=$(cur_ssid))"
 	LAST_FAILED_AT=0
+	if [ ! -e "$JOINED_FLAG" ]; then
+		mkdir -p "$(dirname "$JOINED_FLAG")"
+		write_durable "$JOINED_FLAG" "$(date +%s)"
+	fi
 	shareframe-event wifi "connected"
 	set_led normal
 	write_mode connected

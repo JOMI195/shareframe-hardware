@@ -17,13 +17,15 @@ exit 0"
 	# Every wait of the manager shrinks to a moment.
 	quiet_stub sleep 'exec /usr/bin/sleep 0.03'
 	export STATE_DIR="$T/run" SVC="$T/service" CONSOLE=/dev/null LOGGER=true STACK_RESTART="$STUBS/wifi-stack-restart"
-	export AP_CONF="$T/ap.conf" WPA_CONF="$T/wpa_supplicant.conf"
+	export AP_CONF="$T/ap.conf" WPA_CONF="$T/wpa_supplicant.conf" JOINED_FLAG="$T/data/wifi-joined"
 	export ASSOC_TIMEOUT=4 DHCP_GRACE=4 NO_ADDR_TIMEOUT=4 AP_RETRY_EVERY=1000000
 	export LED="$T/led" SAFE_MODE="$T/run/safe-mode" LED_RUN="$T/run/led"
 	echo 1 > "$T/led/max_brightness"
 	echo "none [timer]" > "$T/led/trigger"
 	printf "AP_SSID='frame-ap'\nAP_PASS='hotspot123'\n" > "$AP_CONF"
 	printf 'network={\n\tssid="home"\n}\n' > "$WPA_CONF"
+	# A frame set up before: marking it would sync the disk on every first connect.
+	mkdir -p "$T/data" && echo 1700000000 > "$JOINED_FLAG"
 	pid=
 }
 
@@ -70,6 +72,17 @@ in_hotspot() {
 	eventually 10 is led normal
 	assert_called "s6-svc -u $T/service/wpa_supplicant"
 	assert_called 'shareframe-event wifi connected'
+}
+
+# The display keeps a fresh frame's setup screen up until this flag exists.
+@test "the first connection marks the frame as set up, later ones leave the mark alone" {
+	rm "$JOINED_FLAG"
+	connected
+	eventually 5 test -s "$JOINED_FLAG"
+	stop
+	echo kept > "$JOINED_FLAG"
+	connected
+	assert_equal "$(cat "$JOINED_FLAG")" kept
 }
 
 @test "an LED repainted by a stack restart is set right again" {
