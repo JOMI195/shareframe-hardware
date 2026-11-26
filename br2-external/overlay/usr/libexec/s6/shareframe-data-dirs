@@ -1,5 +1,5 @@
 #!/bin/sh
 # Seed /data/shareframe/ subdirs. Runs after mount-data.
 set -e
-mkdir -p /data/shareframe/db /data/shareframe/images
+mkdir -p /data/shareframe/db /data/shareframe/images /data/shareframe/default-images
 chmod 0750 /data/shareframe
